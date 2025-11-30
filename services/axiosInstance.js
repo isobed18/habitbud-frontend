@@ -1,15 +1,15 @@
 import axios from 'axios';
-import { getToken } from '../utils/auth';
+import { getAccessToken } from '../utils/auth';
 
 const axiosInstance = axios.create({
-    baseURL: 'http://192.168.1.46:8000/api/', // sunucu url, wifide calisirken Wireless LAN adapter Wi-Fi: ipv4 kismi olacak. degisirse degistirmeyi unutma
+    baseURL: 'http://192.168.1.6:8000/', // API base URL
 });
 
 axiosInstance.interceptors.request.use(
     async (config) => {
-        const token = await getToken();
+        const token = await getAccessToken();
         if (token) {
-            config.headers.Authorization = `Token ${token}`;
+            config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
     },
