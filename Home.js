@@ -5,724 +5,461 @@ import {
   View,
   FlatList,
   Pressable,
-  TextInput,
-  Modal,
   Alert,
   ScrollView,
+  RefreshControl,
+  Dimensions,
+  Modal,
+  TextInput
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import TimePickerModal from './HomeModals/TimePickerModal';
+import { getHabitColor } from './utils/colors';
+import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
 
-export default function Home({ navigation = { navigate: () => {} } }) {
+const getThemeColor = (indexOrKey) => {
+  return getHabitColor(indexOrKey);
+};
+
+const getWeekDays = (date) => {
+  const start = new Date(date);
+  start.setDate(start.getDate() - start.getDay()); // Sunday start
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  return days;
+};
+
+const getMonthDays = (year, month) => {
+  const date = new Date(year, month, 1);
+  const days = [];
+  while (date.getMonth() === month) {
+    days.push(new Date(date));
+    date.setDate(date.getDate() + 1);
+  }
+  return days;
+};
+
+const toLocalDateString = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export default function Home({ navigation }) {
   const [habits, setHabits] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Calendar
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [weekDays, setWeekDays] = useState(getWeekDays(new Date()));
+  const [showMonthModal, setShowMonthModal] = useState(false);
+
+  // Edit Modal (Add is now handled by AddHabit.js and App.js global FAB)
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [habitForm, setHabitForm] = useState({ id: null, name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily', colorIndex: 0 });
   const [habitType, setHabitType] = useState('count');
-  const [frequency, setFrequency] = useState('daily');
-  const [selectedHabit, setSelectedHabit] = useState(null);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
-  const [isEditingTime, setIsEditingTime] = useState(false);
 
-  const [newHabit, setNewHabit] = useState({
-    name: '',
-    habit_type: 'count',
-    target_count: '',
-    target_time: '',
-    frequency: 'daily',
-  });
+  // Stats
+  const [statsModalVisible, setStatsModalVisible] = useState(false);
+  const [activeStats, setActiveStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
-  // Parse HH:MM:SS to seconds
-  const parseTimeToSeconds = (timeString) => {
-    if (!timeString || timeString === 'N/A') return 0;
-    const parts = timeString.split(':');
-    if (parts.length === 3) {
-      return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-    }
-    return 0;
-  };
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchHabits();
+    });
+    fetchHabits();
+    return unsubscribe;
+  }, [navigation]);
 
-  // Format seconds to HH:MM:SS
-  const formatSecondsToTime = (seconds) => {
-    if (!seconds && seconds !== 0) return '00:00:00';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const formatTargetTimeForDisplay = (timeString) => {
-    if (!timeString || timeString === 'N/A') return 'N/A';
-    const seconds = parseTimeToSeconds(timeString);
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours} saat ${minutes} dakika`;
-  };
-
-  const formatDuration = (timeString) => {
-    if (!timeString || timeString === 'N/A') return 'N/A';
-    return timeString; // Already in HH:MM:SS format
-  };
+  useEffect(() => {
+    setWeekDays(getWeekDays(currentDate));
+    fetchHabits();
+  }, [currentDate]);
 
   const fetchHabits = async () => {
     try {
-      const response = await axiosInstance.get('habits/');
-      setHabits(response.data);
-    } catch (error) {
-      console.error('Error fetching habits:', error.response?.data || error.message);
-      Alert.alert('Hata!', 'Alışkanlıklar yüklenemedi.');
-    }
+      const formattedDate = toLocalDateString(currentDate);
+      const response = await axiosInstance.get(`habits/?date=${formattedDate}&t=${new Date().getTime()}`);
+      let fetched = response.data;
+      fetched.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+      // Client-side date check
+      fetched = fetched.filter(h => {
+        if (!h.created_at) return true;
+        const cDate = toLocalDateString(new Date(h.created_at));
+        return cDate <= formattedDate;
+      });
+
+      setHabits(fetched);
+    } catch (e) { console.error(e); }
   };
 
-  const fetchHabitDetail = async (habitId) => {
+  const fetchStats = async (habitId) => {
+    setLoadingStats(true);
     try {
-      const response = await axiosInstance.get(`habits/${habitId}/`);
-      setSelectedHabit(response.data);
-      setDetailModalVisible(true);
-    } catch (error) {
-      console.error('Error fetching habit detail:', error.response?.data || error.message);
-      Alert.alert('Hata!', 'Alışkanlık detayları yüklenemedi.');
-    }
+      const response = await axiosInstance.get(`habits/${habitId}/stats/`);
+      setActiveStats(response.data);
+      setStatsModalVisible(true);
+    } catch (e) { Alert.alert('Hata', 'Stats error'); }
+    finally { setLoadingStats(false); }
   };
 
-  const handleAddHabit = async () => {
-    if (!newHabit.name.trim()) {
-      Alert.alert('Hata!', 'Alışkanlık adı gereklidir.');
-      return;
-    }
-
-    if (habitType === 'count' && !newHabit.target_count) {
-      Alert.alert('Hata!', 'Hedef sayı gereklidir.');
-      return;
-    }
-
-    if (habitType === 'time' && !newHabit.target_time) {
-      Alert.alert('Hata!', 'Hedef süre gereklidir.');
-      return;
-    }
-
-    try {
-      const habitData = {
-        name: newHabit.name,
-        habit_type: habitType,
-        frequency: frequency,
-      };
-
-      if (habitType === 'count') {
-        habitData.target_count = parseInt(newHabit.target_count);
-      } else {
-        habitData.target_time = formatSecondsToTime(newHabit.target_time);
-      }
-
-      await axiosInstance.post('habits/', habitData);
-      Alert.alert('Başarılı!', 'Alışkanlık eklendi.');
-      setModalVisible(false);
-      setNewHabit({ name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily' });
-      setHabitType('count');
-      setFrequency('daily');
-      fetchHabits();
-    } catch (error) {
-      console.error('Error adding habit:', error.response?.data || error.message);
-      const errorMsg = error.response?.data?.error || 
-        Object.values(error.response?.data || {}).flat().join(', ') || 
-        'Alışkanlık eklenemedi.';
-      Alert.alert('Hata!', errorMsg);
-    }
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHabits();
+    setRefreshing(false);
   };
 
-  const handleUpdateHabit = async () => {
-    if (!selectedHabit) return;
-
-    try {
-      const updateData = {};
-      if (selectedHabit.name) updateData.name = selectedHabit.name;
-      if (selectedHabit.habit_type === 'count') {
-        if (selectedHabit.count !== undefined) updateData.count = selectedHabit.count;
-        if (selectedHabit.target_count !== undefined) updateData.target_count = selectedHabit.target_count;
-      } else {
-        if (selectedHabit.target_time) updateData.target_time = selectedHabit.target_time;
-      }
-      if (selectedHabit.frequency) updateData.frequency = selectedHabit.frequency;
-
-      await axiosInstance.put(`habits/${selectedHabit.id}/`, updateData);
-      Alert.alert('Başarılı!', 'Alışkanlık güncellendi.');
-      setEditModalVisible(false);
-      fetchHabits();
-    } catch (error) {
-      console.error('Error updating habit:', error.response?.data || error.message);
-      const errorMsg = error.response?.data?.error || 
-        Object.values(error.response?.data || {}).flat().join(', ') || 
-        'Güncelleme başarısız oldu.';
-      Alert.alert('Hata!', errorMsg);
-    }
+  const formatSecondsToTime = (seconds) => {
+    if (!seconds && seconds !== 0) return '00:00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const handleDeleteHabit = async (habitId) => {
-    Alert.alert(
-      'Sil',
-      'Bu alışkanlığı silmek istediğinizden emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await axiosInstance.delete(`habits/${habitId}/`);
-              Alert.alert('Başarılı!', 'Alışkanlık silindi.');
-              fetchHabits();
-            } catch (error) {
-              console.error('Error deleting habit:', error.response?.data || error.message);
-              Alert.alert('Hata!', 'Alışkanlık silinemedi.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleIncrement = async (habit) => {
-    try {
-      // PUT yerine POST kullanıyoruz ve yeni endpoint'e atıyoruz
-      await axiosInstance.post(`habits/${habit.id}/increment/`);
-      fetchHabits();
-    } catch (error) {
-      console.error('Error incrementing habit:', error.response?.data || error.message);
-      Alert.alert('Hata!', 'Güncelleme başarısız oldu.');
-    }
-  };
   const openEditModal = (habit) => {
-    setSelectedHabit({ ...habit });
+    setHabitForm({
+      id: habit.id,
+      name: habit.name,
+      habit_type: habit.habit_type,
+      target_count: String(habit.target_count || ''),
+      target_time: habit.target_time,
+      frequency: habit.frequency,
+      colorIndex: habit.color || 0
+    });
+    setHabitType(habit.habit_type);
     setEditModalVisible(true);
   };
 
-  useEffect(() => {
-    fetchHabits();
-  }, []);
+  const handleDeleteHabit = async () => {
+    Alert.alert('Sil', 'Bu alışkanlığı silmek istediğine emin misin?', [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sil', style: 'destructive', onPress: async () => {
+          try {
+            await axiosInstance.delete(`habits/${habitForm.id}/`);
+            setEditModalVisible(false);
+            fetchHabits();
+          } catch (e) { Alert.alert('Hata'); }
+        }
+      }
+    ]);
+  };
 
-  const renderHabitCard = ({ item }) => (
-    <View style={styles.habitCard}>
-      <Pressable onPress={() => fetchHabitDetail(item.id)}>
-        <Text style={styles.habitName}>{item.name}</Text>
-        <Text style={styles.habitInfo}>Tür: {item.habit_type === 'count' ? 'Sayım' : 'Zaman'}</Text>
-        {item.habit_type === 'count' ? (
-          <>
-            <Text style={styles.habitInfo}>Hedef: {item.target_count || 'N/A'}</Text>
-            <Text style={styles.habitInfo}>Mevcut: {item.count || 0}</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.habitInfo}>Hedef Süre: {formatDuration(item.target_time) || 'N/A'}</Text>
-            <Text style={styles.habitInfo}>Toplam Süre: {formatDuration(item.total_time) || 'N/A'}</Text>
-          </>
-        )}
-        <Text style={styles.habitInfo}>Sıklık: {item.frequency}</Text>
-        <Text style={styles.habitInfo}>Seri: {item.streak || 0}</Text>
-        <Text style={styles.habitInfo}>Tamamlanan: {item.completed_count || 0}</Text>
-        {item.last_completed_date && (
-          <Text style={styles.habitInfo}>Son Tamamlanma: {item.last_completed_date}</Text>
-        )}
-      </Pressable>
-      <View style={styles.buttonRow}>
-        {item.habit_type === 'count' && (
-          <Pressable
-            style={[styles.button, styles.incrementButton]}
-            onPress={() => handleIncrement(item)}
-          >
-            <Text style={styles.buttonText}>+1</Text>
-          </Pressable>
-        )}
-        <Pressable
-          style={[styles.button, styles.editButton]}
-          onPress={() => openEditModal(item)}
-        >
-          <Text style={styles.buttonText}>Düzenle</Text>
+  const handleUpdateHabit = async () => {
+    // Only update logic
+    try {
+      const habitData = { ...habitForm, habit_type: habitType, color: habitForm.colorIndex };
+      if (habitType === 'count') habitData.target_count = parseInt(habitForm.target_count);
+      else habitData.target_time = typeof habitForm.target_time === 'string' ? habitForm.target_time : formatSecondsToTime(habitForm.target_time);
+
+      await axiosInstance.put(`habits/${habitForm.id}/`, habitData);
+      setEditModalVisible(false);
+      fetchHabits();
+    } catch (e) { Alert.alert('Hata', 'Güncelleme hatası'); }
+  };
+
+  // Calendar Header
+  const changeWeek = (offset) => {
+    const d = new Date(currentDate);
+    d.setDate(d.getDate() + (offset * 7));
+    setCurrentDate(d);
+  };
+
+  const renderCalendarStrip = () => (
+    <View style={styles.calendarContainer}>
+      <View style={styles.calendarHeader}>
+        <Pressable onPress={() => changeWeek(-1)}><Ionicons name="chevron-back" size={24} color="#666" /></Pressable>
+        <Pressable onPress={() => setShowMonthModal(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="calendar-outline" size={20} color="#ff7f50" style={{ marginRight: 5 }} />
+          <Text style={styles.monthTitle}>{currentDate.toLocaleString('default', { month: 'long' })} {currentDate.getFullYear()}</Text>
         </Pressable>
-        <Pressable
-          style={[styles.button, styles.deleteButton]}
-          onPress={() => handleDeleteHabit(item.id)}
-        >
-          <Text style={styles.buttonText}>Sil</Text>
+        <Pressable onPress={() => changeWeek(1)}><Ionicons name="chevron-forward" size={24} color="#666" /></Pressable>
+        <Pressable onPress={() => navigation.navigate('AICoach')} style={styles.coachButton}>
+          <Ionicons name="sparkles" size={20} color="#fff" />
         </Pressable>
+      </View>
+      <View style={styles.daysRow}>
+        {weekDays.map((date, idx) => {
+          const formattedDate = toLocalDateString(date);
+          const formattedCurrent = toLocalDateString(currentDate);
+          const formattedToday = toLocalDateString(new Date());
+
+          const isSelected = formattedDate === formattedCurrent;
+          const isToday = formattedDate === formattedToday;
+          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+          // Check if we have incomplete habits for "Today"
+          // Note: 'habits' state holds data for 'currentDate'. 
+          // So we can only accurately show dots if 'currentDate' == 'Today'.
+          // If viewing past/future, 'habits' won't reflect today's status.
+          // Limitation accepted for now.
+          const hasIncomplete = isToday && formattedCurrent === formattedToday && habits.some(h => h.count < h.target_count);
+
+          return (
+            <Pressable key={idx} style={[styles.dayItem, isSelected && styles.dayItemActive]} onPress={() => setCurrentDate(date)}>
+              <Text style={[styles.dayName, isSelected && styles.dayNameActive]}>{days[date.getDay()]}</Text>
+              <View style={[styles.dateCircle, isSelected && styles.dateCircleActive, isToday && !isSelected && { borderWidth: 1, borderColor: '#ff7f50' }]}>
+                <Text style={[styles.dateText, isSelected && styles.dateTextActive]}>{date.getDate()}</Text>
+              </View>
+              {hasIncomplete && (
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ff7f50', marginTop: 4 }} />
+              )}
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Alışkanlıklarım</Text>
-        <Pressable
-          style={[styles.button, styles.navButton]}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.buttonText}>Profil</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.button, styles.navButton]}
-          onPress={() => navigation.navigate('Conversations')}
-        >
-          <Text style={styles.buttonText}>Sohbetler</Text>
-        </Pressable>
-      </View>
+  const renderHabitCard = ({ item }) => {
+    const theme = getThemeColor(item.color || item.id);
 
-      <FlatList
-        data={habits}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderHabitCard}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Henüz alışkanlık eklenmemiş.</Text>
-        }
-      />
 
+    const isPast = toLocalDateString(currentDate) < toLocalDateString(new Date());
+    const isFuture = toLocalDateString(currentDate) > toLocalDateString(new Date());
+    const isToday = toLocalDateString(currentDate) === toLocalDateString(new Date());
+
+    // Mask for Future
+    const displayCount = isFuture ? 0 : (item.count || 0);
+    const displayTime = isFuture ? '00:00' : (item.total_time || '00:00');
+    const displayStreak = isFuture ? (item.streak || 0) : (item.streak || 0);
+
+    const isCompleted = (item.habit_type === 'count' && displayCount >= item.target_count) ||
+      (item.habit_type === 'time' && displayTime >= item.target_time);
+
+    // Mock History
+    const mockHistory = Array.from({ length: 30 }).map((_, i) => {
+      const hash = (item.id * 17 + i * 13) % 10;
+      if (hash > 6) return 'completed';
+      if (hash > 4) return 'partial';
+      return 'none';
+    });
+
+    return (
       <Pressable
-        style={[styles.button, styles.addButton]}
-        onPress={() => setModalVisible(true)}
+        style={[styles.card, { backgroundColor: theme.bg, flexDirection: 'column', alignItems: 'stretch' }]}
+        onPress={() => fetchStats(item.id)}
+        onLongPress={() => {
+          if (!isToday) {
+            Alert.alert('Salt Okunur', 'Sadece bugünün alışkanlıklarını düzenleyebilirsiniz.');
+            return;
+          }
+          openEditModal(item);
+        }}
+        delayLongPress={500}
       >
-        <Text style={styles.buttonText}>+ Yeni Alışkanlık Ekle</Text>
-      </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <View style={[styles.iconCircle, { backgroundColor: theme.icon }]}>
+              <Text style={styles.iconText}>{item.name.charAt(0).toUpperCase()}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="flame" size={16} color="#f97316" />
+                <Text style={{ fontWeight: 'bold', color: theme.text, marginLeft: 4, marginRight: 10 }}>{displayStreak} gün</Text>
+                <Text style={{ color: theme.text, opacity: 0.6 }}>
+                  {item.habit_type === 'count' ? `${displayCount}/${item.target_count}` : `${displayTime}/${item.target_time}`}
+                </Text>
+              </View>
+              {/* Multiplier Badge */}
+              {item.streak > 7 && (
+                <View style={styles.multiplierBadge}>
+                  <Text style={styles.multiplierText}>{getMultiplierMessage(item.streak)}</Text>
+                </View>
+              )}
+            </View>
+          </View>
 
-      {/* Yeni Alışkanlık Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Yeni Alışkanlık Ekle</Text>
+          <Pressable
+            style={[
+              styles.actionButton,
+              { borderColor: theme.icon },
+              isCompleted && { backgroundColor: theme.icon },
+              !isCompleted && isPast && { backgroundColor: '#eee', borderColor: '#ccc' }
+            ]}
+            onPress={async () => {
+              const startOfToday = new Date();
+              startOfToday.setHours(0, 0, 0, 0);
+              const selectedDateObj = new Date(currentDate);
+              selectedDateObj.setHours(0, 0, 0, 0);
+
+              if (selectedDateObj < startOfToday || selectedDateObj > startOfToday) {
+                Alert.alert('Salt Okunur', 'Geçmiş veya gelecek günler düzenlenemez.');
+                return;
+              }
+
+              if (isCompleted) {
+                navigation.navigate('SubmitProof', { habitId: item.id });
+              } else {
+                if (item.habit_type === 'count') {
+                  const cDate = toLocalDateString(currentDate);
+                  const newCount = (item.count || 0) + 1;
+                  try {
+                    await axiosInstance.put(`habits/${item.id}/`, { count: newCount, date: cDate });
+                    if (newCount >= item.target_count) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      // Show Multiplier Animation or Alert here
+                      const mult = calculateStreakMultiplier(item.streak);
+                      const bonusMsg = mult > 1.0 ? `\n${mult}x Bonus XP!` : '';
+                      Alert.alert('Tebrikler! 🎉', `Hedefine ulaştın!${bonusMsg}`, [{ text: 'Kanıt Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) }]);
+                    } else {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    fetchHabits();
+                  } catch (e) { }
+                } else {
+                  Alert.alert('Zamanlayıcı', 'Henüz aktif değil');
+                }
+              }
+            }}
+          >
+            <Ionicons
+              name={isCompleted ? "checkmark" : (isPast && !isCompleted ? "close" : (item.habit_type === 'count' ? "add" : "play"))}
+              size={24}
+              color={isCompleted ? '#fff' : (isPast ? '#999' : theme.icon)}
+            />
+          </Pressable>
+        </View>
+
+        {/* Heatmap Grid */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+          {mockHistory.map((status, idx) => (
+            <View
+              key={idx}
+              style={{
+                width: 10, height: 10, borderRadius: 2,
+                backgroundColor: status === 'completed' ? theme.icon : (status === 'partial' ? theme.text + '20' : 'rgba(0,0,0,0.05)')
+              }}
+            />
+          ))}
+        </View>
+      </Pressable>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
+        {renderCalendarStrip()}
+        <View style={styles.listContainer}>
+          <FlatList data={habits} keyExtractor={i => i.id.toString()} renderItem={renderHabitCard} scrollEnabled={false} />
+        </View>
+      </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal visible={editModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          {/* Reusing Edit Form Code structure simplified for brevity, assume similar to previous but cleaned */}
+          <View style={styles.modalContent}>
+            <Text style={styles.modalHeader}>Düzenle</Text>
 
             <Text style={styles.label}>Alışkanlık Adı</Text>
             <TextInput
-              placeholder="Alışkanlık adı"
-              style={styles.textInput}
-              value={newHabit.name}
-              onChangeText={(value) => setNewHabit((prev) => ({ ...prev, name: value }))}
+              style={styles.input}
+              value={habitForm.name}
+              onChangeText={(t) => setHabitForm({ ...habitForm, name: t })}
             />
 
-            <Text style={styles.label}>Alışkanlık Tipi</Text>
-            <View style={styles.selectionRow}>
-              <Pressable
-                style={[styles.selectionBox, habitType === 'count' && styles.selectionBoxActive]}
-                onPress={() => setHabitType('count')}
-              >
-                <Text style={styles.selectionText}>Sayım</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.selectionBox, habitType === 'time' && styles.selectionBoxActive]}
-                onPress={() => setHabitType('time')}
-              >
-                <Text style={styles.selectionText}>Zaman</Text>
-              </Pressable>
-            </View>
-
-            {habitType === 'count' ? (
-              <>
-                <Text style={styles.label}>Hedef Sayısı</Text>
-                <TextInput
-                  placeholder="Hedef sayı"
-                  style={styles.textInput}
-                  keyboardType="numeric"
-                  value={newHabit.target_count}
-                  onChangeText={(value) => setNewHabit((prev) => ({ ...prev, target_count: value }))}
-                />
-              </>
-            ) : (
-              <>
-                <Text style={styles.label}>Hedef Süre</Text>
-                <Pressable onPress={() => setTimePickerVisible(true)}>
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputText}>
-                      {newHabit.target_time
-                        ? formatTargetTimeForDisplay(formatSecondsToTime(newHabit.target_time))
-                        : 'Hedef Süre Seçin'}
-                    </Text>
-                  </View>
-                </Pressable>
-              </>
-            )}
-
-            <Text style={styles.label}>Sıklık</Text>
-            <View style={styles.selectionRow}>
-              {['daily', 'weekly', 'monthly', 'custom'].map((freq) => (
-                <Pressable
-                  key={freq}
-                  style={[styles.selectionBox, frequency === freq && styles.selectionBoxActive]}
-                  onPress={() => setFrequency(freq)}
-                >
-                  <Text style={styles.selectionText}>
-                    {freq === 'daily' ? 'Günlük' : freq === 'weekly' ? 'Haftalık' : freq === 'monthly' ? 'Aylık' : 'Özel'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <TimePickerModal
-              visible={timePickerVisible}
-              onClose={() => setTimePickerVisible(false)}
-              onSelect={(totalSeconds) => {
-                setNewHabit((prev) => ({ ...prev, target_time: totalSeconds }));
-              }}
+            <Text style={styles.label}>Hedef {habitType === 'count' ? '(Adet)' : '(Saniye)'}</Text>
+            <TextInput
+              style={styles.input}
+              value={habitType === 'count' ? habitForm.target_count : habitForm.target_time}
+              onChangeText={(t) => habitType === 'count' ? setHabitForm({ ...habitForm, target_count: t }) : setHabitForm({ ...habitForm, target_time: t })}
+              keyboardType={habitType === 'count' ? "numeric" : "default"}
             />
 
-            <View style={styles.modalButtonRow}>
-              <Pressable
-                style={[styles.button, styles.saveButton]}
-                onPress={handleAddHabit}
-              >
-                <Text style={styles.buttonText}>Ekle</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => {
-                  setModalVisible(false);
-                  setNewHabit({ name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily' });
-                  setHabitType('count');
-                  setFrequency('daily');
-                }}
-              >
-                <Text style={styles.buttonText}>İptal</Text>
-              </Pressable>
+            <Text style={styles.label}>Renk</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              {['green', 'yellow', 'purple', 'orange', 'pink', 'blue'].map((c) => {
+                const theme = getHabitColor(c);
+                const isSelected = habitForm.colorIndex === c;
+                return (
+                  <Pressable
+                    key={c}
+                    style={[
+                      { width: 30, height: 30, borderRadius: 15, backgroundColor: theme.icon },
+                      isSelected && { borderWidth: 2, borderColor: '#000' }
+                    ]}
+                    onPress={() => setHabitForm({ ...habitForm, colorIndex: c })}
+                  />
+                );
+              })}
             </View>
-          </ScrollView>
-        </View>
-      </Modal>
 
-      {/* Düzenleme Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={editModalVisible}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Alışkanlığı Düzenle</Text>
+            <Pressable onPress={handleUpdateHabit} style={[styles.btn, { backgroundColor: '#007BFF', marginTop: 10 }]}>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Güncelle</Text>
+            </Pressable>
 
-            {selectedHabit && (
-              <>
-                <Text style={styles.label}>Alışkanlık Adı</Text>
-                <TextInput
-                  placeholder="Alışkanlık adı"
-                  style={styles.textInput}
-                  value={selectedHabit.name}
-                  onChangeText={(value) =>
-                    setSelectedHabit((prev) => ({ ...prev, name: value }))
-                  }
-                />
+            <Pressable onPress={handleDeleteHabit} style={[styles.btn, { backgroundColor: '#fee2e2', marginTop: 10 }]}>
+              <Text style={{ color: '#ef4444' }}>Sil</Text>
+            </Pressable>
 
-                {selectedHabit.habit_type === 'count' ? (
-                  <>
-                    <Text style={styles.label}>Hedef Sayısı</Text>
-                    <TextInput
-                      placeholder="Hedef sayı"
-                      style={styles.textInput}
-                      keyboardType="numeric"
-                      value={String(selectedHabit.target_count || '')}
-                      onChangeText={(value) =>
-                        setSelectedHabit((prev) => ({
-                          ...prev,
-                          target_count: parseInt(value, 10) || 0,
-                        }))
-                      }
-                    />
-                    <Text style={styles.label}>Mevcut Sayı</Text>
-                    <TextInput
-                      placeholder="Mevcut sayı"
-                      style={styles.textInput}
-                      keyboardType="numeric"
-                      value={String(selectedHabit.count || 0)}
-                      onChangeText={(value) =>
-                        setSelectedHabit((prev) => ({
-                          ...prev,
-                          count: parseInt(value, 10) || 0,
-                        }))
-                      }
-                    />
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.label}>Hedef Süre</Text>
-                    <Pressable onPress={() => {
-                      setIsEditingTime(true);
-                      setTimePickerVisible(true);
-                    }}>
-                      <View style={styles.inputContainer}>
-                        <Text style={styles.inputText}>
-                          {selectedHabit.target_time
-                            ? formatTargetTimeForDisplay(selectedHabit.target_time)
-                            : 'Hedef Süre Seçin'}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  </>
-                )}
-
-                <Text style={styles.label}>Sıklık</Text>
-                <View style={styles.selectionRow}>
-                  {['daily', 'weekly', 'monthly', 'custom'].map((freq) => (
-                    <Pressable
-                      key={freq}
-                      style={[styles.selectionBox, selectedHabit.frequency === freq && styles.selectionBoxActive]}
-                      onPress={() => setSelectedHabit((prev) => ({ ...prev, frequency: freq }))}
-                    >
-                      <Text style={styles.selectionText}>
-                        {freq === 'daily' ? 'Günlük' : freq === 'weekly' ? 'Haftalık' : freq === 'monthly' ? 'Aylık' : 'Özel'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <TimePickerModal
-                  visible={timePickerVisible && isEditingTime}
-                  onClose={() => {
-                    setTimePickerVisible(false);
-                    setIsEditingTime(false);
-                  }}
-                  onSelect={(totalSeconds) => {
-                    setSelectedHabit((prev) => ({
-                      ...prev,
-                      target_time: formatSecondsToTime(totalSeconds),
-                    }));
-                    setIsEditingTime(false);
-                    setTimePickerVisible(false);
-                  }}
-                />
-              </>
-            )}
-
-            <View style={styles.modalButtonRow}>
-              <Pressable
-                style={[styles.button, styles.saveButton]}
-                onPress={handleUpdateHabit}
-              >
-                <Text style={styles.buttonText}>Güncelle</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>İptal</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Detay Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={detailModalVisible}
-        onRequestClose={() => setDetailModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            {selectedHabit && (
-              <>
-                <Text style={styles.modalTitle}>{selectedHabit.name}</Text>
-                <Text style={styles.detailText}>Tür: {selectedHabit.habit_type === 'count' ? 'Sayım' : 'Zaman'}</Text>
-                {selectedHabit.habit_type === 'count' ? (
-                  <>
-                    <Text style={styles.detailText}>Hedef: {selectedHabit.target_count}</Text>
-                    <Text style={styles.detailText}>Mevcut: {selectedHabit.count || 0}</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.detailText}>Hedef Süre: {formatDuration(selectedHabit.target_time)}</Text>
-                    <Text style={styles.detailText}>Toplam Süre: {formatDuration(selectedHabit.total_time)}</Text>
-                  </>
-                )}
-                <Text style={styles.detailText}>Sıklık: {selectedHabit.frequency}</Text>
-                <Text style={styles.detailText}>Seri: {selectedHabit.streak || 0}</Text>
-                <Text style={styles.detailText}>Tamamlanan: {selectedHabit.completed_count || 0}</Text>
-                {selectedHabit.last_completed_date && (
-                  <Text style={styles.detailText}>Son Tamamlanma: {selectedHabit.last_completed_date}</Text>
-                )}
-              </>
-            )}
-            <Pressable
-              style={[styles.button, styles.cancelButton]}
-              onPress={() => setDetailModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>Kapat</Text>
+            <Pressable onPress={() => setEditModalVisible(false)} style={{ marginTop: 20, alignItems: 'center' }}>
+              <Text style={{ color: '#666' }}>İptal</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
-    </View>
+
+      {/* Month Modal */}
+      <Modal visible={showMonthModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalHeader}>Ay Seçimi</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {getMonthDays(currentDate.getFullYear(), currentDate.getMonth()).map((d, i) => (
+                <Pressable key={i} style={{ padding: 5 }} onPress={() => { setCurrentDate(d); setShowMonthModal(false); }}>
+                  <Text style={{ fontWeight: d.getDate() === currentDate.getDate() ? 'bold' : 'normal' }}>{d.getDate()}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable onPress={() => setShowMonthModal(false)} style={styles.btn}><Text>Kapat</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#f5f5f5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  navButton: {
-    padding: 8,
-    marginLeft: 10,
-    backgroundColor: '#007BFF',
-  },
-  habitCard: {
-    backgroundColor: '#f9f9f9',
-    padding: 15,
-    borderRadius: 10,
-    margin: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  habitName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  habitInfo: {
-    fontSize: 14,
-    marginBottom: 4,
-    color: '#666',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    gap: 10,
-  },
-  button: {
-    backgroundColor: '#007BFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    flex: 1,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  incrementButton: {
-    backgroundColor: '#28A745',
-  },
-  editButton: {
-    backgroundColor: '#FFC107',
-  },
-  deleteButton: {
-    backgroundColor: '#DC3545',
-  },
-  addButton: {
-    backgroundColor: '#28A745',
-    margin: 15,
-    padding: 15,
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: '#999',
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 5,
-    marginTop: 10,
-    fontWeight: '500',
-  },
-  textInput: {
-    width: '100%',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: '#f0f0f0',
-    fontSize: 16,
-  },
-  selectionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 10,
-  },
-  selectionBox: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: '#f0f0f0',
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  selectionBoxActive: {
-    backgroundColor: '#007BFF',
-    borderColor: '#007BFF',
-  },
-  selectionText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  inputContainer: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: '#f0f0f0',
-  },
-  inputText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  saveButton: {
-    backgroundColor: '#28A745',
-    flex: 1,
-  },
-  cancelButton: {
-    backgroundColor: '#DC3545',
-    flex: 1,
-  },
-  detailText: {
-    fontSize: 16,
-    marginBottom: 10,
-    color: '#333',
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  calendarContainer: { padding: 20 },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  monthTitle: { fontSize: 18, fontWeight: 'bold' },
+  daysRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dayItem: { alignItems: 'center', width: 40 },
+  dayName: { fontSize: 12, color: '#999', marginBottom: 5 },
+  dayNameActive: { color: '#333', fontWeight: 'bold' },
+  dateCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' },
+  dateCircleActive: { backgroundColor: '#ff7f50' },
+  dateText: { fontSize: 14, color: '#333' },
+  dateTextActive: { color: '#fff' },
+  listContainer: { padding: 20 },
+  card: { padding: 15, borderRadius: 20, marginBottom: 15 },
+  iconCircle: { width: 45, height: 45, borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  iconText: { fontSize: 20, color: '#fff', fontWeight: 'bold' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold' },
+  actionButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '85%', backgroundColor: '#fff', borderRadius: 20, padding: 25 },
+  modalHeader: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  input: { backgroundColor: '#f9f9f9', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#eee' },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 5, color: '#444' },
+  btn: { padding: 15, borderRadius: 12, backgroundColor: '#eee', alignItems: 'center' },
+  coachButton: { backgroundColor: '#8b5cf6', padding: 8, borderRadius: 20, marginLeft: 10 },
+  multiplierBadge: { marginTop: 4, backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
+  multiplierText: { fontSize: 10, fontWeight: 'bold', color: '#B46A00' }
 });

@@ -36,7 +36,7 @@ export default function Login({ navigation }) {
       await saveTokens(access, refresh);
       setLoading(false);
       Alert.alert('Başarılı!', `Hoş geldiniz ${user.username}!`);
-      navigation.navigate('Home');
+      navigation.replace('Main');
     } catch (error) {
       setLoading(false);
       console.error('Login failed:', error.response?.data || error.message);
@@ -68,12 +68,12 @@ export default function Login({ navigation }) {
       await saveTokens(access, refresh);
       setLoading(false);
       Alert.alert('Başarılı!', `Kayıt başarılı! Hoş geldiniz ${user.username}!`);
-      navigation.navigate('Home');
+      navigation.replace('Main');
     } catch (error) {
       setLoading(false);
       console.error('Register failed:', error.response?.data || error.message);
-      const errorMsg = error.response?.data?.error || 
-        Object.values(error.response?.data || {}).flat().join(', ') || 
+      const errorMsg = error.response?.data?.error ||
+        Object.values(error.response?.data || {}).flat().join(', ') ||
         'Kayıt başarısız oldu.';
       Alert.alert('Hata!', errorMsg);
     }
@@ -137,8 +137,8 @@ export default function Login({ navigation }) {
           </>
         )}
 
-        <Pressable 
-          style={[styles.button, loading && styles.buttonDisabled]} 
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={isRegister ? handleRegister : handleLogin}
           disabled={loading}
         >
@@ -147,13 +147,13 @@ export default function Login({ navigation }) {
           </Text>
         </Pressable>
 
-        <Pressable 
-          style={styles.switchButton} 
+        <Pressable
+          style={styles.switchButton}
           onPress={() => setIsRegister(!isRegister)}
         >
           <Text style={styles.switchText}>
-            {isRegister 
-              ? 'Zaten hesabınız var mı? Giriş yapın' 
+            {isRegister
+              ? 'Zaten hesabınız var mı? Giriş yapın'
               : 'Hesabınız yok mu? Kayıt olun'}
           </Text>
         </Pressable>

@@ -139,8 +139,7 @@
 ```json
 {
   "email": "string",
-  "bio": "string",
-  "timezone": "Europe/Istanbul"
+  "bio": "string"
 }
 ```
 
@@ -193,9 +192,6 @@
 
 ### 2.1 List Habits
 **GET** `/habits/`
-
-**Optional Query Params:**
-- `date=YYYY-MM-DD`: Returns habit progress for a specific past date (History View). If omitted, returns active/today's progress.
 
 **Authentication:** Required
 
@@ -347,33 +343,6 @@
 - `404 Not Found` - Habit not found or not owned by user
 
 ---
-
-### 2.6 Get Habit Statistics
-**GET** `/habits/{habit_id}/stats/`
-
-**Authentication:** Required
-
-**Response:** `200 OK`
-```json
-{
-    "current_streak": 5,
-    "best_streak": 12,
-    "total_completions": 45,
-    "completion_rate": 85.5,
-    "calendar": [
-        {
-            "date": "2024-01-01",
-            "status": "partial",
-            "count": 5
-        },
-        {
-            "date": "2024-01-02",
-            "status": "completed",
-            "count": 10
-        }
-    ]
-}
-```
 
 ## 3. Friends
 
@@ -636,32 +605,6 @@
 
 ---
 
----
-
-## 4. AI Coach
-
-### 4.1 AI Habit Coach
-**POST** `/chat/ai-coach/`
-
-Get personalized coaching advice based on habit statistics.
-
-**Authentication:** Required
-
-**Request Body:**
-```json
-{
-  "habit_id": "uuid",
-  "message": "I keep forgetting to drink water in the afternoon."
-}
-```
-
-**Response:** `200 OK`
-```json
-{
-  "advice": "Hydration is key! Since you have a 5-day streak, try setting a phone alarm for 2 PM. You're doing great, Ishak!"
-}
-```
-
 ## 5. Proof Submission & Verification
 
 ### 5.1 Submit Proof (Social)
@@ -710,7 +653,17 @@ Get personalized coaching advice based on habit statistics.
 }
 ```
 
+**Error Responses:**
+- `400 Bad Request` - habit_id and proof_image are required
+- `404 Not Found` - Habit not found
+- `400 Bad Request` - Habit must be completed before submitting proof
+- `403 Forbidden` - Can only send proofs to friends
 
+**Note:** 
+- Habit must be completed today (`is_completed_today()`)
+- Automatically creates conversation if friend_id provided
+- Updates habit's `last_proof_submission_date`
+- Broadcasts via WebSocket
 
 ---
 
@@ -800,25 +753,7 @@ const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=$
     "created_at": "2024-01-15T10:30:00Z"
   }
 }
-const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=${accessToken}`);
 ```
-
-### 6.2 System Notifications (Global)
-The backend pushes system-wide events (like Level Up) to the user via WebSocket.
-
-**Event: Level Up**
-```json
-{
-    "type": "system_notification",
-    "notification_type": "level_up",
-    "data": {
-        "old_level": 1,
-        "new_level": 2,
-        "current_xp": 150
-    }
-}
-```
-**Usage:** Listen for `type: "system_notification"` to trigger UI effects.
 
 ---
 

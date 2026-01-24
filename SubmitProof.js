@@ -8,65 +8,73 @@ import {
   ScrollView,
   Image,
   TextInput,
+  ActivityIndicator,
+  Modal,
+  FlatList,
+  Dimensions, // Add Dimensions
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axiosInstance from './services/axiosInstance';
+import { Ionicons } from '@expo/vector-icons';
+import { getHabitColor } from './utils/colors'; // Reuse colors
+
+const { width } = Dimensions.get('window');
 
 export default function SubmitProof({ route, navigation }) {
-  const { habitId, conversationId, friendId } = route.params || {};
+  const { habitId } = route.params || {};
+  const [loading, setLoading] = useState(false);
   const [habits, setHabits] = useState([]);
-  const [selectedHabit, setSelectedHabit] = useState(null);
+  const [selectedHabitId, setSelectedHabitId] = useState(habitId || null);
   const [image, setImage] = useState(null);
   const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+
+  // Friend Selection
+  const [friends, setFriends] = useState([]);
+  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [showFriendSelector, setShowFriendSelector] = useState(false);
+  const [sendingToFriends, setSendingToFriends] = useState(false);
+  const [sharingHabitId, setSharingHabitId] = useState(null);
 
   useEffect(() => {
     fetchHabits();
-    if (habitId) {
-      setSelectedHabit(habitId);
-    }
+    fetchFriends();
   }, []);
+
+  useEffect(() => {
+    if (habitId) setSelectedHabitId(habitId);
+  }, [habitId]);
 
   const fetchHabits = async () => {
     try {
-      const response = await axiosInstance.get('habits/');
+      // Get all habits to allow user to select which one they are proving
+      // Or filter to only those "completed" today if that's the rule?
+      // User said "habit completed -> proof screen".
+      const response = await axiosInstance.get(`habits/?t=${new Date().getTime()}`);
       setHabits(response.data);
     } catch (error) {
-      console.error('Error fetching habits:', error.response?.data || error.message);
-      Alert.alert('Hata!', 'Alışkanlıklar yüklenemedi.');
+      console.error(error);
     }
   };
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Fotoğraf seçmek için galeri erişim izni gereklidir.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0]);
-    }
+  const fetchFriends = async () => {
+    try {
+      const response = await axiosInstance.get('friends/list/');
+      setFriends(response.data);
+    } catch (error) { console.error(error); }
   };
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('İzin Gerekli', 'Fotoğraf çekmek için kamera erişim izni gereklidir.');
+      Alert.alert('İzin Gerekli', 'Kamera izni gereklidir.');
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
+      aspect: [4, 5],
+      quality: 0.7,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -75,232 +83,352 @@ export default function SubmitProof({ route, navigation }) {
   };
 
   const submitProof = async () => {
-    if (!selectedHabit) {
-      Alert.alert('Hata!', 'Lütfen bir alışkanlık seçin.');
-      return;
-    }
-
-    if (!image) {
-      Alert.alert('Hata!', 'Lütfen bir fotoğraf seçin.');
-      return;
-    }
+    if (!selectedHabitId) { Alert.alert('Hata', 'Lütfen bir alışkanlık seçin.'); return; }
+    if (!image) { Alert.alert('Hata', 'Fotoğraf çekmediniz.'); return; }
 
     setLoading(true);
+    setVerificationResult(null);
+
     try {
       const formData = new FormData();
-      formData.append('habit_id', selectedHabit);
+      formData.append('habit_id', selectedHabitId);
       formData.append('proof_image', {
         uri: image.uri,
         type: 'image/jpeg',
         name: 'proof.jpg',
       });
-      if (content.trim()) {
-        formData.append('content', content.trim());
-      }
-      if (conversationId) {
-        formData.append('conversation_id', conversationId);
-      }
-      if (friendId) {
-        formData.append('friend_id', friendId);
-      }
 
-      const response = await axiosInstance.post('chat/proof/submit/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const response = await axiosInstance.post('chat/proof/ai/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      Alert.alert('Başarılı!', 'Kanıt gönderildi.');
-      navigation.goBack();
-    } catch (error) {
-      console.error('Error submitting proof:', error.response?.data || error.message);
-      const errorMsg = error.response?.data?.error || 
-        Object.values(error.response?.data || {}).flat().join(', ') || 
-        'Kanıt gönderilemedi.';
-      Alert.alert('Hata!', errorMsg);
-    } finally {
       setLoading(false);
+      const { ai_status } = response.data;
+      const isVerified = ai_status?.verified === true;
+
+      setVerificationResult({
+        success: isVerified,
+        title: isVerified ? 'Harika! Doğrulandı 🎉' : 'Doğrulanamadı 😔',
+        // Use motivational_message if available, fallback to reason or default text
+        message: ai_status?.motivational_message || ai_status?.reason || (isVerified ? 'Kanıtın kabul edildi.' : 'Bunu kabul edemedik.'),
+        xp: response.data.xp_awarded || 0,
+        habitId: selectedHabitId
+      });
+      setSharingHabitId(selectedHabitId);
+
+    } catch (error) {
+      setLoading(false);
+      console.error('Submit Proof Error Detail:', error.response?.data || error.message);
+      Alert.alert('Hata', 'Kanıt gönderilemedi: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Kanıt Gönder</Text>
+  const [searchQuery, setSearchQuery] = useState('');
 
-        <Text style={styles.label}>Alışkanlık Seçin</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.habitsScroll}>
-          {habits.map((habit) => (
-            <Pressable
-              key={habit.id}
-              style={[
-                styles.habitOption,
-                selectedHabit === habit.id && styles.habitOptionSelected,
-              ]}
-              onPress={() => setSelectedHabit(habit.id)}
-            >
-              <Text
-                style={[
-                  styles.habitOptionText,
-                  selectedHabit === habit.id && styles.habitOptionTextSelected,
-                ]}
+  const filteredFriends = friends.filter(f =>
+    f.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const sendToFriends = async () => {
+    if (selectedFriends.length === 0) {
+      Alert.alert('Uyarı', 'Lütfen en az bir arkadaş seçin.');
+      return;
+    }
+    if ((!verificationResult && !sharingHabitId) || !image) {
+      Alert.alert('Hata', 'Gerekli veriler eksik.');
+      return;
+    }
+
+    setSendingToFriends(true);
+    try {
+      const hId = sharingHabitId || verificationResult?.habitId;
+      console.log('Sending Proof to Friends Debug:', {
+        habit_id: hId,
+        image_uri: image?.uri,
+        selectedFriends: selectedFriends
+      });
+
+      if (!hId) throw new Error('Habit ID not found for sharing');
+
+      const promises = selectedFriends.map(friendId => {
+        const formData = new FormData();
+        formData.append('habit_id', hId);
+        formData.append('friend_id', friendId);
+        formData.append('proof_image', {
+          uri: image.uri,
+          type: 'image/jpeg',
+          name: 'proof.jpg',
+        });
+        formData.append('content', content || 'Kanıt doğrulaması isteği gönderildi. 📸');
+
+        return axiosInstance.post('chat/proof/submit/', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      });
+
+      await Promise.all(promises);
+
+      setSendingToFriends(false);
+      setShowFriendSelector(false);
+      setSharingHabitId(null);
+      setVerificationResult(null);
+      navigation.goBack();
+      Alert.alert('Başarılı! 🚀', 'Arkadaşlarına doğrulama isteği gönderildi.');
+    } catch (error) {
+      setSendingToFriends(false);
+      console.error('Send error:', error.response?.data || error.message);
+      Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const toggleFriendSelection = (id) => {
+    if (selectedFriends.includes(id)) {
+      setSelectedFriends(selectedFriends.filter(x => x !== id));
+    } else {
+      setSelectedFriends([...selectedFriends, id]);
+    }
+  };
+
+  const selectedHabit = habits.find(h => h.id === selectedHabitId);
+
+  return (
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <Text style={styles.headerTitle}>Kanıt Gönder 📸</Text>
+
+        {/* Habit Selector as Chips */}
+        <Text style={styles.label}>Hangi alışkanlık?</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+          {habits.map(h => {
+            const isSelected = h.id === selectedHabitId;
+            const theme = getHabitColor(h.color || h.id || 0);
+            return (
+              <Pressable
+                key={h.id}
+                style={[styles.habitChip, isSelected && { backgroundColor: theme.icon, borderColor: theme.icon }]}
+                onPress={() => setSelectedHabitId(h.id)}
               >
-                {habit.name}
-              </Text>
-            </Pressable>
-          ))}
+                <Text style={[styles.habitChipText, isSelected && { color: '#fff' }]}>{h.name}</Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
-        <Text style={styles.label}>Fotoğraf</Text>
-        {image ? (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: image.uri }} style={styles.image} />
-            <Pressable
-              style={[styles.button, styles.removeImageButton]}
-              onPress={() => setImage(null)}
-            >
-              <Text style={styles.buttonText}>Fotoğrafı Kaldır</Text>
+        {/* Camera Preview / Action */}
+        <View style={styles.cameraContainer}>
+          {image ? (
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: image.uri }} style={styles.previewImage} />
+              <Pressable style={styles.retakeBtn} onPress={() => setImage(null)}>
+                <Ionicons name="refresh" size={20} color="#fff" />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.cameraPlaceholder} onPress={takePhoto}>
+              <View style={styles.circleIcon}>
+                <Ionicons name="camera" size={40} color="#666" />
+              </View>
+              <Text style={styles.cameraText}>Fotoğraf Çek</Text>
             </Pressable>
-          </View>
-        ) : (
-          <View style={styles.imageButtons}>
-            <Pressable style={[styles.button, styles.imageButton]} onPress={pickImage}>
-              <Text style={styles.buttonText}>Galeriden Seç</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.imageButton]} onPress={takePhoto}>
-              <Text style={styles.buttonText}>Fotoğraf Çek</Text>
-            </Pressable>
-          </View>
-        )}
+          )}
+        </View>
 
+        {/* Message */}
         <Text style={styles.label}>Mesaj (Opsiyonel)</Text>
         <TextInput
-          style={styles.textInput}
+          style={styles.messageInput}
+          placeholder="Bugün nasıl geçti?"
           value={content}
           onChangeText={setContent}
-          placeholder="Mesajınızı yazın..."
           multiline
-          numberOfLines={4}
         />
 
+        {/* Submit Button */}
         <Pressable
-          style={[styles.button, styles.submitButton, loading && styles.buttonDisabled]}
+          style={[styles.submitBtn, (!image || !selectedHabitId || loading) && styles.disabledBtn]}
           onPress={submitProof}
-          disabled={loading}
+          disabled={!image || !selectedHabitId || loading}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Gönderiliyor...' : 'Kanıtı Gönder'}
-          </Text>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Yapay Zekaya Gönder 🚀</Text>}
         </Pressable>
 
-        <Pressable
-          style={[styles.button, styles.cancelButton]}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.buttonText}>İptal</Text>
+        <Pressable style={styles.cancelBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.cancelText}>Vazgeç</Text>
         </Pressable>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Success Modal */}
+      <Modal visible={!!verificationResult} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.successCard}>
+            <View style={[styles.iconBadge, { backgroundColor: verificationResult?.success ? '#22c55e' : '#ef4444' }]}>
+              <Ionicons name={verificationResult?.success ? "checkmark" : "close"} size={30} color="#fff" />
+            </View>
+            <Text style={styles.resultTitle}>{verificationResult?.title}</Text>
+            <Text style={styles.resultMsg}>{verificationResult?.message}</Text>
+
+            {verificationResult?.success && (
+              <Pressable
+                style={styles.socialBtn}
+                onPress={() => {
+                  console.log('Share Button Pressed');
+                  setVerificationResult(null); // Close Success Modal
+                  setTimeout(() => {
+                    setShowFriendSelector(true);
+                  }, 300);
+                }}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Arkadaşlara Gönder</Text>
+              </Pressable>
+            )}
+
+            <Pressable style={styles.closeModalBtn} onPress={() => { setVerificationResult(null); if (verificationResult?.success) navigation.goBack(); }}>
+              <Text style={{ color: '#666' }}>Kapat</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Snapchat Style Friend Selector */}
+      <Modal visible={showFriendSelector} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.snapContainer}>
+          <View style={styles.snapHeader}>
+            <Pressable onPress={() => setShowFriendSelector(false)}>
+              <Ionicons name="chevron-down" size={30} color="#333" />
+            </Pressable>
+            <View style={styles.searchBar}>
+              <Ionicons name="search" size={20} color="#999" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Arkadaş Seç..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+          </View>
+
+          <Text style={styles.snapSectionTitle}>Arkadaşlar</Text>
+
+          <FlatList
+            data={filteredFriends}
+            keyExtractor={i => i.id.toString()}
+            renderItem={({ item }) => {
+              const isSelected = selectedFriends.includes(item.id);
+              return (
+                <Pressable style={styles.snapFriendRow} onPress={() => toggleFriendSelection(item.id)}>
+                  <View style={styles.snapAvatar}>
+                    <Text style={styles.snapAvatarText}>{item.username.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.snapFriendName}>{item.username}</Text>
+                  <View style={[styles.snapCheckbox, isSelected && styles.snapCheckboxActive]}>
+                    {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                </Pressable>
+              );
+            }}
+            contentContainerStyle={{ paddingBottom: 100 }}
+          />
+
+          {selectedFriends.length > 0 && (
+            <Pressable
+              style={styles.snapSendBtn}
+              onPress={sendToFriends}
+              disabled={sendingToFriends}
+            >
+              {sendingToFriends ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.snapSendBtnText}>Gönder ({selectedFriends.length})</Text>
+                  <Ionicons name="send" size={24} color="#fff" />
+                </>
+              )}
+            </Pressable>
+          )}
+
+          {selectedFriends.length === 0 && (
+            <Pressable style={styles.snapCloseBtn} onPress={() => setShowFriendSelector(false)}>
+              <Text style={styles.snapCloseText}>İptal</Text>
+            </Pressable>
+          )}
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
-    marginTop: 15,
-  },
-  habitsScroll: {
-    marginBottom: 20,
-  },
-  habitOption: {
-    padding: 12,
-    marginRight: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#f0f0f0',
-  },
-  habitOptionSelected: {
-    backgroundColor: '#007BFF',
-    borderColor: '#007BFF',
-  },
-  habitOptionText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  habitOptionTextSelected: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  imageContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  image: {
-    width: 300,
-    height: 300,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  imageButtons: {
+  container: { flex: 1, backgroundColor: '#fff' },
+  headerTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 20, color: '#333' },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#555' },
+
+  habitChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#eee', backgroundColor: '#f9f9f9', marginRight: 8 },
+  habitChipText: { fontSize: 14, color: '#333' },
+
+  cameraContainer: { width: '100%', height: width * 0.8, backgroundColor: '#f0f0f0', borderRadius: 20, marginBottom: 20, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  cameraPlaceholder: { alignItems: 'center' },
+  circleIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  cameraText: { color: '#999', fontSize: 16 },
+  imageWrapper: { width: '100%', height: '100%' },
+  previewImage: { width: '100%', height: '100%' },
+  retakeBtn: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 20 },
+
+  messageInput: { backgroundColor: '#f9f9f9', borderRadius: 12, padding: 15, height: 100, textAlignVertical: 'top', fontSize: 16, marginBottom: 20 },
+
+  submitBtn: { backgroundColor: '#6f42c1', padding: 18, borderRadius: 16, alignItems: 'center', marginBottom: 10 },
+  submitBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  disabledBtn: { backgroundColor: '#ccc' },
+
+  cancelBtn: { alignItems: 'center', padding: 15 },
+  cancelText: { color: '#666', fontSize: 16 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  successCard: { backgroundColor: '#fff', width: '100%', padding: 30, borderRadius: 25, alignItems: 'center' },
+  iconBadge: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  resultTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  resultMsg: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 20 },
+  socialBtn: { flexDirection: 'row', backgroundColor: '#007BFF', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
+  closeModalBtn: { padding: 10 },
+
+  // Snapchat Style
+  snapContainer: { flex: 1, backgroundColor: '#f5f5f5' },
+  snapHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#fff', gap: 10 },
+  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 20, paddingHorizontal: 15, height: 40 },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 16 },
+  snapSectionTitle: { fontSize: 14, fontWeight: '700', color: '#666', margin: 15, marginBottom: 5 },
+  snapFriendRow: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#fff', marginBottom: 1 },
+  snapAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#ffda00', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  snapAvatarText: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  snapFriendName: { flex: 1, fontSize: 18, fontWeight: '600' },
+  snapCheckbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
+  snapCheckboxActive: { backgroundColor: '#3cb2e2', borderColor: '#3cb2e2' },
+
+  snapSendBtn: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    left: 20,
+    backgroundColor: '#3cb2e2',
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-  },
-  imageButton: {
-    flex: 1,
-    backgroundColor: '#6C757D',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    marginBottom: 20,
-    backgroundColor: '#f0f0f0',
-  },
-  button: {
-    backgroundColor: '#007BFF',
-    padding: 15,
-    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  snapSendBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginRight: 10 },
+
+  snapCloseBtn: {
+    position: 'absolute',
+    bottom: 30,
+    alignSelf: 'center',
+    padding: 10
   },
-  submitButton: {
-    backgroundColor: '#28A745',
-    marginTop: 10,
-  },
-  cancelButton: {
-    backgroundColor: '#DC3545',
-  },
-  removeImageButton: {
-    backgroundColor: '#DC3545',
-    padding: 10,
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-  },
+  snapCloseText: { color: '#999', fontSize: 16 }
 });
 
