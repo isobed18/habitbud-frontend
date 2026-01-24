@@ -17,6 +17,14 @@ const getThemeColor = (index) => {
     return getHabitColor(index);
 };
 
+const PRESETS = [
+    { name: 'Kitap Okuma', icon: 'book', color: 'purple', type: 'count', target: 5 },
+    { name: 'Spor Yapma', icon: 'fitness', color: 'green', type: 'count', target: 1 },
+    { name: 'Meditasyon', icon: 'leaf', color: 'blue', type: 'time', target: 600 },
+    { name: 'Su İçme', icon: 'water', color: 'blue', type: 'count', target: 8 },
+    { name: 'Erken Uyanma', icon: 'alarm', color: 'yellow', type: 'count', target: 1 },
+];
+
 export default function AddHabit({ navigation }) {
     const [habitForm, setHabitForm] = useState({ name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily', colorIndex: 0 });
     const [habitType, setHabitType] = useState('count');
@@ -37,8 +45,6 @@ export default function AddHabit({ navigation }) {
             if (habitType === 'count') habitData.target_count = parseInt(habitForm.target_count);
             else habitData.target_time = typeof habitForm.target_time === 'string' ? habitForm.target_time : formatSecondsToTime(habitForm.target_time);
 
-            console.log('Sending Habit Data:', JSON.stringify(habitData, null, 2));
-
             await axiosInstance.post('habits/', habitData);
             Alert.alert('Başarılı', 'Alışkanlık oluşturuldu', [
                 { text: 'Tamam', onPress: () => navigation.goBack() }
@@ -46,6 +52,25 @@ export default function AddHabit({ navigation }) {
         } catch (error) {
             console.error('Add Habit Error:', error.response?.data || error.message);
             Alert.alert('Hata', 'Ekleme başarısız: ' + (error.response?.data?.error || "bilinmiyor"));
+        }
+    };
+
+    const addPreset = async (preset) => {
+        try {
+            const habitData = {
+                name: preset.name,
+                habit_type: preset.type,
+                color: preset.color,
+                frequency: 'daily',
+                target_count: preset.type === 'count' ? preset.target : null,
+                target_time: preset.type === 'time' ? formatSecondsToTime(preset.target) : null
+            };
+            await axiosInstance.post('habits/', habitData);
+            Alert.alert('Başarılı', `${preset.name} eklendi!`, [
+                { text: 'Tamam', onPress: () => navigation.goBack() }
+            ]);
+        } catch (error) {
+            Alert.alert('Hata', 'Preset eklenemedi.');
         }
     };
 
@@ -58,6 +83,21 @@ export default function AddHabit({ navigation }) {
                 </Pressable>
             </View>
             <ScrollView style={{ padding: 20 }}>
+                <Text style={styles.label}>Hızlı Ekle</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
+                    {PRESETS.map((p, i) => {
+                        const theme = getThemeColor(p.color);
+                        return (
+                            <Pressable key={i} style={[styles.presetCard, { backgroundColor: theme.bg }]} onPress={() => addPreset(p)}>
+                                <Ionicons name={p.icon} size={24} color={theme.icon} />
+                                <Text style={[styles.presetText, { color: theme.icon }]}>{p.name}</Text>
+                            </Pressable>
+                        );
+                    })}
+                </ScrollView>
+
+                <View style={styles.divider} />
+                <Text style={styles.label}>Manuel Ekle</Text>
                 <TextInput
                     placeholder="Alışkanlık Adı"
                     style={styles.input}
@@ -134,4 +174,9 @@ const styles = StyleSheet.create({
     colorCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     colorCircleActive: { borderWidth: 3, borderColor: '#333' },
     btn: { padding: 15, borderRadius: 12, alignItems: 'center' },
+
+    presetScroll: { marginBottom: 25 },
+    presetCard: { padding: 15, borderRadius: 15, alignItems: 'center', marginRight: 12, minWidth: 100, gap: 5 },
+    presetText: { fontSize: 12, fontWeight: 'bold' },
+    divider: { height: 1, backgroundColor: '#eee', marginVertical: 20 },
 });

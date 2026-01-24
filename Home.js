@@ -10,7 +10,8 @@ import {
   RefreshControl,
   Dimensions,
   Modal,
-  TextInput
+  TextInput,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -223,6 +224,41 @@ export default function Home({ navigation }) {
     </View>
   );
 
+  const renderStories = () => (
+    <View style={styles.storiesContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+        {/* Create Story Button */}
+        <Pressable
+          style={styles.createStoryBtn}
+          onPress={() => navigation.navigate('SubmitProof', { isStory: true })}
+        >
+          <View style={styles.plusIconCircle}>
+            <Ionicons name="add" size={24} color="#fff" />
+          </View>
+          <Text style={styles.storyUser}>Sen</Text>
+        </Pressable>
+
+        {stories.map((story) => (
+          <Pressable
+            key={story.id}
+            style={styles.storyItem}
+            onPress={() => {
+              setActiveStory(story);
+              setStoryModalVisible(true);
+            }}
+          >
+            <View style={[styles.storyCircle, !story.is_viewed && styles.storyCircleActive]}>
+              <View style={styles.storyAvatar}>
+                <Text style={styles.storyAvatarText}>{story.user?.username?.charAt(0).toUpperCase()}</Text>
+              </View>
+            </View>
+            <Text style={styles.storyUser} numberOfLines={1}>{story.user?.username}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   const renderHabitCard = ({ item }) => {
     const theme = getThemeColor(item.color || item.id);
 
@@ -266,7 +302,15 @@ export default function Home({ navigation }) {
               <Text style={styles.iconText}>{item.name.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{item.name}</Text>
+                {item.is_challenge_habit && (
+                  <View style={styles.missionBadge}>
+                    <Ionicons name="trophy" size={10} color="#fff" />
+                    <Text style={styles.missionBadgeText}>MİSYON</Text>
+                  </View>
+                )}
+              </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="flame" size={16} color="#f97316" />
                 <Text style={{ fontWeight: 'bold', color: theme.text, marginLeft: 4, marginRight: 10 }}>{displayStreak} gün</Text>
@@ -308,7 +352,10 @@ export default function Home({ navigation }) {
                   const cDate = toLocalDateString(currentDate);
                   const newCount = (item.count || 0) + 1;
                   try {
-                    await axiosInstance.put(`habits/${item.id}/`, { count: newCount, date: cDate });
+                    const response = await axiosInstance.put(`habits/${item.id}/`, { count: newCount, date: cDate });
+                    console.log('INCREMENT RESPONSE:', JSON.stringify(response.data, null, 2));
+                    console.log('Current streak before refresh:', item.streak);
+
                     if (newCount >= item.target_count) {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                       // Show Multiplier Animation or Alert here
@@ -318,8 +365,10 @@ export default function Home({ navigation }) {
                     } else {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }
-                    fetchHabits();
-                  } catch (e) { }
+                    await fetchHabits();
+                  } catch (e) {
+                    console.error('INCREMENT ERROR:', e);
+                  }
                 } else {
                   Alert.alert('Zamanlayıcı', 'Henüz aktif değil');
                 }
@@ -430,6 +479,7 @@ export default function Home({ navigation }) {
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }

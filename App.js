@@ -17,6 +17,8 @@ import Leaderboard from './Leaderboard';
 import Conversations from './Conversations';
 import Chat from './Chat';
 import AICoach from './AICoach';
+import FriendProfile from './FriendProfile';
+import Challenges from './Challenges';
 import AddHabit from './AddHabit';
 
 // Utils & Services
@@ -60,6 +62,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
           let iconName;
           if (route.name === 'Home') iconName = isFocused ? 'home' : 'home-outline';
           else if (route.name === 'Leaderboard') iconName = isFocused ? 'stats-chart' : 'stats-chart-outline';
+          else if (route.name === 'Challenges') iconName = isFocused ? 'trophy' : 'trophy-outline';
           else if (route.name === 'Conversations') iconName = isFocused ? 'chatbubbles' : 'chatbubbles-outline';
           else if (route.name === 'Profile') iconName = isFocused ? 'person' : 'person-outline';
 
@@ -90,6 +93,7 @@ function MainTabs() {
       initialRouteName="Home"
     >
       <Tab.Screen name="Leaderboard" component={Leaderboard} />
+      <Tab.Screen name="Challenges" component={Challenges} />
       <Tab.Screen name="Home" component={Home} />
       {/* Middle dummy tab for FAB */}
       <Tab.Screen
@@ -162,6 +166,7 @@ export default function App() {
             />
             <Stack.Screen name="Chat" component={Chat} />
             <Stack.Screen name="AICoach" component={AICoach} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="FriendProfile" component={FriendProfile} options={{ animation: 'slide_from_right' }} />
 
             <Stack.Screen
               name="AddHabitModal"

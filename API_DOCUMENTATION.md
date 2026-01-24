@@ -111,7 +111,29 @@
 
 ---
 
-### 1.4 Get Profile
+### 1.4 Token Refresh
+**POST** `/users/api/token/refresh/`
+
+**Authentication:** Not required (uses refresh token)
+
+**Request Body:**
+```json
+{
+  "refresh": "string"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "access": "string",
+  "refresh": "string" (optional if rotation enabled)
+}
+```
+
+---
+
+### 1.5 Get Profile
 **GET** `/users/api/profile/`
 
 **Authentication:** Required
@@ -217,7 +239,10 @@
     "last_ai_verification_date": "YYYY-MM-DD" | null,
     "completed_count": 0,
     "last_completed_date": "YYYY-MM-DD" | null,
-    "frequency": "daily" | "weekly" | "monthly" | "custom"
+    "frequency": "daily" | "weekly" | "monthly" | "custom",
+    "color": "green" | "yellow" | "purple" | "orange" | "pink" | "blue",
+    "is_challenge_habit": false,    // New field
+    "challenge": "uuid" | null      // New field (linked invitation/mission)
   }
 ]
 ```
@@ -238,7 +263,8 @@
   "habit_type": "count" | "time",
   "target_count": 10,  // Required if habit_type is "count"
   "target_time": "HH:MM:SS",  // Required if habit_type is "time"
-  "frequency": "daily" | "weekly" | "monthly" | "custom"
+  "frequency": "daily" | "weekly" | "monthly" | "custom",
+  "color": "blue" // Optional, default: blue
 }
 ```
 
@@ -306,7 +332,8 @@
   "count": 5,
   "target_count": 10,
   "target_time": "HH:MM:SS",
-  "frequency": "daily"
+  "frequency": "daily",
+  "color": "purple"
 }
 ```
 
@@ -495,6 +522,15 @@
 
 ---
 
+### 3.5 List Friends (Alias)
+**GET** `/users/friends/`
+
+**Authentication:** Required
+
+**Response:** `200 OK` (Same as 3.4)
+
+---
+
 ## 4. Chat & Conversations
 
 ### 4.1 List Conversations
@@ -643,7 +679,7 @@
 ### 4.1 AI Habit Coach
 **POST** `/chat/ai-coach/`
 
-Get personalized coaching advice based on habit statistics.
+Get personalized coaching advice. The AI now analyzes your **last 7 days of history** and **recent chat context** for trend-aware guidance.
 
 **Authentication:** Required
 
@@ -658,11 +694,85 @@ Get personalized coaching advice based on habit statistics.
 **Response:** `200 OK`
 ```json
 {
-  "advice": "Hydration is key! Since you have a 5-day streak, try setting a phone alarm for 2 PM. You're doing great, Ishak!"
+  "advice": "Hydration is key! Since you have a 5-day streak but missed yesterday, try setting a phone alarm for 2 PM. You're doing great, Ishak!"
 }
 ```
 
-## 5. Proof Submission & Verification
+### 4.2 AI Agent
+**POST** `/chat/ai-agent/`
+
+Execute complex objectives using the IO.net Custom Agent (Workflows).
+
+**Authentication:** Required
+
+**Request Body:**
+```json
+{
+  "objective": "Analyze my fitness goals and suggest a notification schedule.",
+  "instructions": "Be very specific and actionable."
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "success",
+  "data": { ... agent output ... }
+}
+```
+
+## 5. Stories
+
+### 5.1 Create Story
+**POST** `/chat/stories/create/`
+
+**Authentication:** Required
+
+**Request Body:** (multipart/form-data)
+- `image`: File (required)
+- `habit`: uuid (optional)
+- `content`: string (optional)
+
+**Response:** `201 Created`
+
+### 5.2 Story Feed
+**GET** `/chat/stories/feed/`
+
+Returns active (non-expired) stories from friends and self.
+
+**Response:** `200 OK` (list)
+```json
+[
+  {
+    "id": "uuid",
+    "user": { ... },
+    "image": "url",
+    "content": "string",
+    "likes_count": 5,
+    "is_liked": true,
+    "habit_details": {
+      "id": "uuid",
+      "name": "Running",
+      "icon": "runner"
+    },
+    "created_at": "timestamp"
+  }
+]
+```
+
+### 5.3 Toggle Story Like
+**POST** `/chat/stories/{story_id}/like/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+{
+  "liked": true,
+  "likes_count": 6
+}
+```
+
 
 ### 5.1 Submit Proof (Social)
 **POST** `/chat/proof/submit/`
@@ -822,6 +932,24 @@ The backend pushes system-wide events (like Level Up) to the user via WebSocket.
 
 ---
 
+## 8. Gamification Mechanics
+
+### 8.1 XP & Leveling Curve
+The system uses a **Non-Linear Progression** curve (Square Root).
+- Formula: `Level = Sqrt(XP / 50) + 1`
+- Early levels are fast, later levels require exponentially more XP.
+
+### 8.2 Streak Multipliers (Snapchat Style)
+Consistency is rewarded with bonus XP.
+- **Components:** `Verified Habits` (AI/Social) and `Daily Completions`.
+- **Base XP:** 10 per completion.
+- **Multiplier:** `1.0x` + `0.05x` per day of streak (starting after Day 7).
+- **Cap:** 3.0x Multiplier.
+
+> **Example:** A 20-day streak earns `10 * 1.65 = 16 XP` per day (instead of 10).
+
+---
+
 ### 6.3 Typing Indicator
 **Send:**
 ```json
@@ -858,6 +986,75 @@ The backend pushes system-wide events (like Level Up) to the user via WebSocket.
   "field_name": ["Error message 1", "Error message 2"]
 }
 ```
+
+---
+
+---
+
+## 9. Challenges & Rewards
+
+### 9.1 List Templates
+**GET** `/challenges/templates/`
+
+List all system-defined challenges (Solo/Duo) and their rewards.
+
+**Response:** `200 OK` (list)
+```json
+[
+  {
+    "id": "uuid",
+    "name": "30 Day Runner",
+    "description": "...",
+    "challenge_type": "SOLO" | "DUO",
+    "duration_days": 30,
+    "reward_xp": 500,
+    "reward_points": 500,
+    "reward_item": { "name": "Golden Shoes", "rarity": "epic", "image": "url" },
+    "active_participants": 12
+  }
+]
+```
+
+### 9.2 Join Challenge
+**POST** `/challenges/join/{template_id}/`
+
+**Authentication:** Required
+
+**Rules:** Joining a challenge **automatically creates a matched habit** for you.
+- SOLO: Habit created immediately, status is ACTIVE.
+- DUO: Status is PENDING. Habit is created only after partner accepts.
+
+**Request Body:**
+```json
+{
+  "partner_id": "uuid" // Optional, required for DUO
+}
+```
+
+### 9.3 Withdraw Invitation
+**POST** `/challenges/withdraw/{challenge_id}/`
+
+**Authentication:** Required
+
+Allows the creator to cancel a PENDING Duo invitation.
+
+**Response:** `200 OK`
+
+### 9.4 Accept/Reject Challenge
+**POST** `/challenges/accept/{challenge_id}/`
+
+**Request Body:**
+```json
+{
+  "action": "accept" | "reject"
+}
+```
+**Note:** On `accept`, matched habits are automatically created for BOTH the creator and the partner.
+
+### 9.6 Reward Scaling
+Challenges now award **separate XP and Points**. 
+- The `reward_points` from the template are added on top of the base points awarded per habit completion. 
+- This ensures challenge completions are highly lucrative for the future market.
 
 ---
 

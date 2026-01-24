@@ -21,7 +21,8 @@ import { getHabitColor } from './utils/colors'; // Reuse colors
 const { width } = Dimensions.get('window');
 
 export default function SubmitProof({ route, navigation }) {
-  const { habitId } = route.params || {};
+  const { habitId, isStory: initialIsStory } = route.params || {};
+  const [isStory, setIsStory] = useState(initialIsStory || false);
   const [loading, setLoading] = useState(false);
   const [habits, setHabits] = useState([]);
   const [selectedHabitId, setSelectedHabitId] = useState(habitId || null);
@@ -32,7 +33,7 @@ export default function SubmitProof({ route, navigation }) {
   // Friend Selection
   const [friends, setFriends] = useState([]);
   const [selectedFriends, setSelectedFriends] = useState([]);
-  const [showFriendSelector, setShowFriendSelector] = useState(false);
+  const [modalStep, setModalStep] = useState('none'); // 'none', 'result', 'friends'
   const [sendingToFriends, setSendingToFriends] = useState(false);
   const [sharingHabitId, setSharingHabitId] = useState(null);
 
@@ -90,6 +91,13 @@ export default function SubmitProof({ route, navigation }) {
     setVerificationResult(null);
 
     try {
+      if (isStory) {
+        // Direct story creation bypasses AI verification
+        await createStory(selectedHabitId);
+        setLoading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append('habit_id', selectedHabitId);
       formData.append('proof_image', {
@@ -109,17 +117,46 @@ export default function SubmitProof({ route, navigation }) {
       setVerificationResult({
         success: isVerified,
         title: isVerified ? 'Harika! Doğrulandı 🎉' : 'Doğrulanamadı 😔',
-        // Use motivational_message if available, fallback to reason or default text
         message: ai_status?.motivational_message || ai_status?.reason || (isVerified ? 'Kanıtın kabul edildi.' : 'Bunu kabul edemedik.'),
         xp: response.data.xp_awarded || 0,
         habitId: selectedHabitId
       });
       setSharingHabitId(selectedHabitId);
+      setModalStep('result');
 
     } catch (error) {
       setLoading(false);
       console.error('Submit Proof Error Detail:', error.response?.data || error.message);
       Alert.alert('Hata', 'Kanıt gönderilemedi: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const [postingToStory, setPostingToStory] = useState(false);
+
+  const createStory = async (hId, xp = 0) => {
+    if (!image) return;
+    setPostingToStory(true);
+    try {
+      const formData = new FormData();
+      if (hId) formData.append('habit', hId);
+      formData.append('image', {
+        uri: image.uri,
+        type: 'image/jpeg',
+        name: 'story.jpg',
+      });
+      if (content) formData.append('content', content);
+
+      await axiosInstance.post('chat/stories/create/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setPostingToStory(false);
+      Alert.alert('Harika! 🎉', 'Hikayen paylaşıldı.');
+      if (isStory) navigation.goBack();
+    } catch (error) {
+      setPostingToStory(false);
+      console.error('Story Error:', error.response?.data || error.message);
+      Alert.alert('Hata', 'Hikaye paylaşılamadı.');
     }
   };
 
@@ -142,12 +179,6 @@ export default function SubmitProof({ route, navigation }) {
     setSendingToFriends(true);
     try {
       const hId = sharingHabitId || verificationResult?.habitId;
-      console.log('Sending Proof to Friends Debug:', {
-        habit_id: hId,
-        image_uri: image?.uri,
-        selectedFriends: selectedFriends
-      });
-
       if (!hId) throw new Error('Habit ID not found for sharing');
 
       const promises = selectedFriends.map(friendId => {
@@ -168,17 +199,24 @@ export default function SubmitProof({ route, navigation }) {
 
       await Promise.all(promises);
 
+      // Also share to story if user wants?
+      // For now, let's just finish the friends flow.
       setSendingToFriends(false);
-      setShowFriendSelector(false);
+      setModalStep('none');
       setSharingHabitId(null);
       setVerificationResult(null);
       navigation.goBack();
       Alert.alert('Başarılı! 🚀', 'Arkadaşlarına doğrulama isteği gönderildi.');
     } catch (error) {
       setSendingToFriends(false);
-      console.error('Send error:', error.response?.data || error.message);
-      Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu: ' + (error.response?.data?.error || error.message));
+      Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu.');
     }
+  };
+
+  const shareToStoryAndContinue = async () => {
+    const hId = sharingHabitId || verificationResult?.habitId;
+    await createStory(hId);
+    setModalStep('friends');
   };
 
   const toggleFriendSelection = (id) => {
@@ -257,102 +295,114 @@ export default function SubmitProof({ route, navigation }) {
         </Pressable>
       </ScrollView>
 
-      {/* Success Modal */}
-      <Modal visible={!!verificationResult} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.successCard}>
-            <View style={[styles.iconBadge, { backgroundColor: verificationResult?.success ? '#22c55e' : '#ef4444' }]}>
-              <Ionicons name={verificationResult?.success ? "checkmark" : "close"} size={30} color="#fff" />
-            </View>
-            <Text style={styles.resultTitle}>{verificationResult?.title}</Text>
-            <Text style={styles.resultMsg}>{verificationResult?.message}</Text>
+      {/* Unified Modal */}
+      <Modal visible={modalStep !== 'none'} animationType="slide" transparent={true}>
+        {modalStep === 'result' ? (
+          <View style={styles.modalOverlay}>
+            <View style={styles.successCard}>
+              <View style={[styles.iconBadge, { backgroundColor: verificationResult?.success ? '#22c55e' : '#ef4444' }]}>
+                <Ionicons name={verificationResult?.success ? "checkmark" : "close"} size={30} color="#fff" />
+              </View>
+              <Text style={styles.resultTitle}>{verificationResult?.title}</Text>
+              <Text style={styles.resultMsg}>{verificationResult?.message}</Text>
+              {verificationResult?.xp > 0 && <Text style={styles.xpText}>+{verificationResult.xp} XP / Puan</Text>}
 
-            {verificationResult?.success && (
-              <Pressable
-                style={styles.socialBtn}
-                onPress={() => {
-                  console.log('Share Button Pressed');
-                  setVerificationResult(null); // Close Success Modal
-                  setTimeout(() => {
-                    setShowFriendSelector(true);
-                  }, 300);
-                }}
-              >
-                <Ionicons name="send" size={20} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Arkadaşlara Gönder</Text>
+              {verificationResult?.success && (
+                <View style={{ width: '100%', gap: 10 }}>
+                  <Pressable
+                    style={[styles.socialBtn, { backgroundColor: '#8b5cf6' }]}
+                    onPress={shareToStoryAndContinue}
+                    disabled={postingToStory}
+                  >
+                    {postingToStory ? <ActivityIndicator color="#fff" /> : (
+                      <>
+                        <Ionicons name="images" size={20} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Hikayeme Ekle ve Devam Et</Text>
+                      </>
+                    )}
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.socialBtn}
+                    onPress={() => setModalStep('friends')}
+                  >
+                    <Ionicons name="send" size={20} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Arkadaşlara Gönder</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              <Pressable style={styles.closeModalBtn} onPress={() => { setModalStep('none'); if (verificationResult?.success) navigation.goBack(); }}>
+                <Text style={{ color: '#666' }}>Kapat</Text>
               </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.snapContainer, { backgroundColor: '#fff', flex: 1, marginTop: 50, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }]}>
+            <View style={styles.snapHeader}>
+              <Pressable onPress={() => setModalStep('none')}>
+                <Ionicons name="chevron-down" size={30} color="#333" />
+              </Pressable>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={20} color="#999" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Arkadaş Seç..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+            </View>
+
+            <Text style={styles.snapSectionTitle}>Arkadaşlar</Text>
+
+            <FlatList
+              data={filteredFriends}
+              keyExtractor={i => i.id.toString()}
+              renderItem={({ item }) => {
+                const isSelected = selectedFriends.includes(item.id);
+                return (
+                  <Pressable style={styles.snapFriendRow} onPress={() => toggleFriendSelection(item.id)}>
+                    <View style={styles.snapAvatar}>
+                      <Text style={styles.snapAvatarText}>{item.username.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.snapFriendName}>{item.username}</Text>
+                    <View style={[styles.snapCheckbox, isSelected && styles.snapCheckboxActive]}>
+                      {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    </View>
+                  </Pressable>
+                );
+              }}
+              contentContainerStyle={{ paddingBottom: 100 }}
+              ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#999' }}>Henüz arkadaşın yok.</Text>}
+            />
+
+            {(selectedFriends.length > 0) && (
+              <View style={styles.snapBottomActions}>
+                <Pressable
+                  style={styles.snapSendBtn}
+                  onPress={() => sendToFriends(false)}
+                  disabled={sendingToFriends}
+                >
+                  {sendingToFriends ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Text style={styles.snapSendBtnText}>Gönder ({selectedFriends.length})</Text>
+                      <Ionicons name="send" size={24} color="#fff" />
+                    </>
+                  )}
+                </Pressable>
+              </View>
             )}
 
-            <Pressable style={styles.closeModalBtn} onPress={() => { setVerificationResult(null); if (verificationResult?.success) navigation.goBack(); }}>
-              <Text style={{ color: '#666' }}>Kapat</Text>
-            </Pressable>
+            {(selectedFriends.length === 0) && (
+              <Pressable style={styles.snapCloseBtn} onPress={() => setModalStep('none')}>
+                <Text style={styles.snapCloseText}>İptal</Text>
+              </Pressable>
+            )}
           </View>
-        </View>
-      </Modal>
-
-      {/* Snapchat Style Friend Selector */}
-      <Modal visible={showFriendSelector} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.snapContainer}>
-          <View style={styles.snapHeader}>
-            <Pressable onPress={() => setShowFriendSelector(false)}>
-              <Ionicons name="chevron-down" size={30} color="#333" />
-            </Pressable>
-            <View style={styles.searchBar}>
-              <Ionicons name="search" size={20} color="#999" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Arkadaş Seç..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-          </View>
-
-          <Text style={styles.snapSectionTitle}>Arkadaşlar</Text>
-
-          <FlatList
-            data={filteredFriends}
-            keyExtractor={i => i.id.toString()}
-            renderItem={({ item }) => {
-              const isSelected = selectedFriends.includes(item.id);
-              return (
-                <Pressable style={styles.snapFriendRow} onPress={() => toggleFriendSelection(item.id)}>
-                  <View style={styles.snapAvatar}>
-                    <Text style={styles.snapAvatarText}>{item.username.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <Text style={styles.snapFriendName}>{item.username}</Text>
-                  <View style={[styles.snapCheckbox, isSelected && styles.snapCheckboxActive]}>
-                    {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
-                  </View>
-                </Pressable>
-              );
-            }}
-            contentContainerStyle={{ paddingBottom: 100 }}
-          />
-
-          {selectedFriends.length > 0 && (
-            <Pressable
-              style={styles.snapSendBtn}
-              onPress={sendToFriends}
-              disabled={sendingToFriends}
-            >
-              {sendingToFriends ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.snapSendBtnText}>Gönder ({selectedFriends.length})</Text>
-                  <Ionicons name="send" size={24} color="#fff" />
-                </>
-              )}
-            </Pressable>
-          )}
-
-          {selectedFriends.length === 0 && (
-            <Pressable style={styles.snapCloseBtn} onPress={() => setShowFriendSelector(false)}>
-              <Text style={styles.snapCloseText}>İptal</Text>
-            </Pressable>
-          )}
-        </View>
+        )}
       </Modal>
     </View>
   );
@@ -379,6 +429,7 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: '#6f42c1', padding: 18, borderRadius: 16, alignItems: 'center', marginBottom: 10 },
   submitBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   disabledBtn: { backgroundColor: '#ccc' },
+  storyBtn: { backgroundColor: '#3b82f6' }, // New style for direct story button
 
   cancelBtn: { alignItems: 'center', padding: 15 },
   cancelText: { color: '#666', fontSize: 16 },
@@ -388,6 +439,7 @@ const styles = StyleSheet.create({
   iconBadge: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   resultTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
   resultMsg: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 20 },
+  xpText: { fontSize: 18, fontWeight: 'bold', color: '#22c55e', marginBottom: 15 }, // New style for XP
   socialBtn: { flexDirection: 'row', backgroundColor: '#007BFF', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
   closeModalBtn: { padding: 10 },
 
