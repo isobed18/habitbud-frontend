@@ -4,7 +4,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
-export const BASE_URL = 'http://192.168.1.9:8000/';
+export const BASE_URL = 'http://192.168.1.7:8000/';
 
 export const getImageUrl = (url) => {
     if (!url) return null;
@@ -50,7 +50,7 @@ axiosInstance.interceptors.response.use(
             try {
                 const refreshToken = await getRefreshToken();
                 if (refreshToken) {
-                    const response = await axios.post('http://192.168.1.9:8000/users/api/token/refresh/', {
+                    const response = await axios.post(BASE_URL + 'users/api/token/refresh/', {
                         refresh: refreshToken,
                     });
                     const newAccessToken = response.data.access;
