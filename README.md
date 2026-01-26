@@ -64,44 +64,99 @@ Inspired by Snapchat's engagement model:
 ### Prerequisites
 - **Node.js** (v16 or higher)
 - **npm** or **yarn**
-- **Expo CLI**: `npm install -g expo-cli`
-- **iOS Simulator** (Mac) or **Android Studio** (for emulators)
 - **Expo Go** app (for physical device testing)
+- **Backend server** running on port 8000
 
-### Step 1: Clone the Repository
+#### 🚀 Quick Setup (Automated - Recommended)
+
+**One command to rule them all!** The setup script will automatically:
+- Find your local IP address (prioritizing Wi-Fi)
+- Configure the backend URL
+- Install dependencies
+- Start the Expo development server
+
+```bash
+# Clone the repository
+git clone https://github.com/isobed18/habitbud-frontend.git
+cd habitbud-frontend
+
+# Run automated setup
+npm run setup
+```
+
+**Manual IP Configuration (If automatic detection fails):**
+If the script can't find your correct Wi-Fi IP (e.g., if you have many virtual adapters), you can provide it manually:
+
+1.  Run `ipconfig` in your terminal.
+2.  Find the **IPv4 Address** under your **Wireless LAN adapter Wi-Fi**.
+3.  Run the setup with the IP as a parameter:
+    ```bash
+    npm run setup -- 192.168.1.10
+    ```
+
+**Note**: Make sure your backend server is running on port 8000 before starting.
+
+---
+
+### 📝 Manual Setup (Alternative)
+
+If you prefer to set up manually or the automated script doesn't work:
+
+#### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/isobed18/habitbud-frontend.git
 cd habitbud-frontend
 ```
 
-### Step 2: Install Dependencies
+#### Step 2: Install Dependencies
 ```bash
 npm install
-# or
-yarn install
 ```
 
-### Step 3: Configure Backend URL
-Create or edit `services/axiosInstance.js` and set your backend URL:
+#### Step 3: Find Your Local IP Address
+
+**⚠️ Important**: When using Expo Go on a physical device, you cannot use `localhost`. You must use your computer's local IP address.
+
+#### Windows:
+1. Open Command Prompt or PowerShell
+2. Run: `ipconfig`
+3. Look for **IPv4 Address** under your active network adapter (usually "Wireless LAN adapter Wi-Fi" or "Ethernet adapter")
+4. Copy the IP address (e.g., `192.168.1.6`)
+
+#### Mac/Linux:
+1. Open Terminal
+2. Run: `ifconfig` (Mac) or `ip addr` (Linux)
+3. Look for `inet` address under `en0` (Wi-Fi) or `eth0` (Ethernet)
+4. Copy the IP address (e.g., `192.168.1.6`)
+
+Edit `services/axiosInstance.js` and replace the IP address in `baseURL` with your **Wireless IPv4 address** (found in Step 3):
 
 ```javascript
+// services/axiosInstance.js
 const axiosInstance = axios.create({
-  baseURL: 'YOUR_BACKEND_URL', // e.g., 'http://localhost:8000/api/'
-  timeout: 10000,
+  baseURL: 'http://YOUR_IPV4_ADDRESS:8000/', // e.g., 'http://192.168.1.6:8000/'
+  timeout: 30000,
 });
 ```
 
-### Step 4: Start the Development Server
+#### Step 5: Start the Development Server
 ```bash
 npx expo start
 ```
 
-### Step 5: Run on Device/Emulator
+### Run on Device/Emulator
 
-#### Option A: Physical Device
+#### Option A: Physical Device (Recommended for Testing)
 1. Install **Expo Go** from App Store (iOS) or Play Store (Android)
-2. Scan the QR code from the terminal
-3. App will load on your device
+2. **Important**: Make sure your phone and computer are on the same Wi-Fi network
+3. Scan the QR code from the terminal using:
+   - **iOS**: Use the built-in Camera app to scan the QR code
+   - **Android**: Use the Expo Go app's built-in QR scanner
+4. The app will load on your device
+5. If connection fails, verify:
+   - Your IP address in `axiosInstance.js` matches your current network IP
+   - Your backend server is running and accessible
+   - Both devices are on the same network
 
 #### Option B: iOS Simulator (Mac only)
 ```bash
@@ -116,17 +171,53 @@ npx expo start
 
 ## 🔧 Configuration
 
-### Environment Setup
-The app requires a backend API. Key endpoints include:
+### Backend API Setup
+The app requires a backend API running on your local network. Key endpoints include:
 
 - `/habits/` - Habit CRUD operations
 - `/chat/proof/ai/` - AI verification (Ionet integration)
 - `/chat/stories/feed/` - Story feed
 - `/chat/ai-agent/` - AI coaching and habit creation
-- `/users/reminders/` - Reminder management
+- `/users/remissions/` - Reminder management
+
+**Backend URL Configuration**:
+- The backend URL is configured in `services/axiosInstance.js`
+- Use your local IP address (not `localhost`) when testing on physical devices
+- Format: `http://YOUR_IP_ADDRESS:8000/`
+- Make sure your backend server is running before starting the Expo app
 
 ### Camera Permissions
 The app requires camera and media library permissions for proof submission. These are automatically requested on first use.
+
+## 🐛 Troubleshooting
+
+### Connection Issues
+
+**Problem**: Expo Go can't connect to the development server
+- **Solution**: 
+  - Verify both devices are on the same Wi-Fi network
+  - Check that your firewall isn't blocking the connection
+  - Try restarting the Expo development server
+
+**Problem**: App can't reach the backend API
+- **Solution**:
+  - Verify the IP address in `services/axiosInstance.js` matches your current network IP
+  - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to check your current IP
+  - Make sure your backend server is running
+  - Test the backend URL in a browser: `http://YOUR_IP:8000/`
+
+**Problem**: IP address keeps changing
+- **Solution**: 
+  - Consider setting a static IP on your router for your development machine
+  - Or use a tool like `ngrok` for a stable tunnel (for testing only)
+
+### Expo Go Issues
+
+**Problem**: QR code doesn't work
+- **Solution**:
+  - Try typing the connection URL manually in Expo Go
+  - Use `npx expo start --tunnel` for a tunnel connection (slower but more reliable)
+  - Check that Expo Go app is up to date
 
 ## 📸 Core Feature: Proof Submission
 

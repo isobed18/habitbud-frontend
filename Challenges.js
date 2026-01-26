@@ -13,7 +13,7 @@ import {
     Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { getImageUrl } from './services/axiosInstance';
 
 const { width } = Dimensions.get('window');
 
@@ -202,7 +202,7 @@ export default function Challenges({ navigation }) {
 
                         {item.reward_item && (
                             <View style={styles.rewardPreview}>
-                                <Image source={{ uri: item.reward_item.image }} style={styles.rewardThumb} />
+                                <Image source={{ uri: getImageUrl(item.reward_item.image) }} style={styles.rewardThumb} />
                                 <View>
                                     <Text style={styles.rewardItemName}>{item.reward_item.name}</Text>
                                     <Text style={[styles.rewardRarity, { color: getRarityColor(item.reward_item.rarity) }]}>

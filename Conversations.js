@@ -13,7 +13,7 @@ import {
   Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { getImageUrl } from './services/axiosInstance';
 
 const { width } = Dimensions.get('window');
 
@@ -232,7 +232,7 @@ export default function Conversations({ navigation }) {
                 <View style={[styles.storyCircle, hasUnviewed && styles.storyCircleActive]}>
                   <View style={styles.storyAvatar}>
                     {group.avatar ? (
-                      <Image source={{ uri: group.avatar }} style={{ width: '100%', height: '100%', borderRadius: 30 }} />
+                      <Image source={{ uri: getImageUrl(group.avatar) }} style={{ width: '100%', height: '100%', borderRadius: 30 }} />
                     ) : (
                       <Text style={styles.storyAvatarText}>{group.username?.charAt(0).toUpperCase()}</Text>
                     )}
@@ -286,7 +286,7 @@ export default function Conversations({ navigation }) {
           {activeStory && (
             <View style={styles.fullStory}>
               <Pressable style={{ flex: 1 }} onPress={handleNextStory}>
-                <Image source={{ uri: activeStory.image }} style={styles.fullStoryImage} resizeMode="cover" />
+                <Image source={{ uri: getImageUrl(activeStory.image) }} style={styles.fullStoryImage} resizeMode="cover" />
               </Pressable>
 
               {/* Tap Left Zone */}

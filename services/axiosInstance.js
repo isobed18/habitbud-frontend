@@ -4,8 +4,22 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
+export const BASE_URL = 'http://192.168.1.9:8000/';
+
+export const getImageUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) {
+        // Eğer URL zaten bir tam link ise ama localhost/127.0.0.1 içeriyorsa düzelt
+        return url.replace(/http:\/\/(localhost|127\.0\.0\.1|172\.\d+\.\d+\.\d+)/, BASE_URL.replace(/\/$/, ''));
+    }
+    // Relative path ise BASE_URL ile birleştir
+    const cleanBase = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${cleanBase}${cleanUrl}`;
+};
+
 const axiosInstance = axios.create({
-    baseURL: 'http://192.168.1.6:8000/', // Keep the existing IP
+    baseURL: BASE_URL,
     timeout: 30000,
     headers: {
         'Content-Type': 'application/json',
@@ -36,7 +50,7 @@ axiosInstance.interceptors.response.use(
             try {
                 const refreshToken = await getRefreshToken();
                 if (refreshToken) {
-                    const response = await axios.post('http://192.168.1.6:8000/users/api/token/refresh/', {
+                    const response = await axios.post('http://192.168.1.9:8000/users/api/token/refresh/', {
                         refresh: refreshToken,
                     });
                     const newAccessToken = response.data.access;

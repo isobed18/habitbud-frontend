@@ -11,7 +11,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 
 export default function Chat({ route, navigation }) {
@@ -48,7 +48,7 @@ export default function Chat({ route, navigation }) {
     try {
       const response = await axiosInstance.get(`chat/conversations/${conversationId}/messages/`);
       setMessages(response.data);
-      
+
       // Get other user from first message or conversation
       // Get other user from messages
       if (response.data.length > 0 && currentUserId) {
@@ -96,14 +96,14 @@ export default function Chat({ route, navigation }) {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'message') {
             setMessages((prev) => [...prev, data.message]);
             scrollToBottom();
           } else if (data.type === 'typing') {
             setTypingUser(data.username);
             setIsTyping(data.is_typing);
-            
+
             // Clear typing indicator after 3 seconds
             if (typingTimeoutRef.current) {
               clearTimeout(typingTimeoutRef.current);
@@ -131,7 +131,7 @@ export default function Chat({ route, navigation }) {
       websocket.onclose = (event) => {
         console.log('WebSocket disconnected', event.code, event.reason);
         setWs(null);
-        
+
         // Don't reconnect if it was a 404 or if max attempts reached
         if (event.code === 1006 || event.code === 404 || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS - 1) {
           console.log('WebSocket connection failed, using HTTP API only');
@@ -142,7 +142,7 @@ export default function Chat({ route, navigation }) {
         // Try to reconnect with exponential backoff
         const delay = Math.min(3000 * Math.pow(2, reconnectAttempts), 30000);
         setReconnectAttempts(prev => prev + 1);
-        
+
         reconnectTimeoutRef.current = setTimeout(() => {
           if (wsEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             connectWebSocket();
@@ -202,12 +202,12 @@ export default function Chat({ route, navigation }) {
   const handleInputChange = (text) => {
     setInputText(text);
     sendTypingIndicator(true);
-    
+
     // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    
+
     // Stop typing indicator after 2 seconds of no typing
     typingTimeoutRef.current = setTimeout(() => {
       sendTypingIndicator(false);
@@ -236,8 +236,8 @@ export default function Chat({ route, navigation }) {
       Alert.alert('Başarılı!', `Kanıt ${action === 'verify' ? 'doğrulandı' : 'reddedildi'}.`);
     } catch (error) {
       console.error('Error verifying proof:', error.response?.data || error.message);
-      const errorMsg = error.response?.data?.error || 
-        Object.values(error.response?.data || {}).flat().join(', ') || 
+      const errorMsg = error.response?.data?.error ||
+        Object.values(error.response?.data || {}).flat().join(', ') ||
         'İşlem başarısız oldu.';
       Alert.alert('Hata!', errorMsg);
     }
@@ -295,19 +295,16 @@ export default function Chat({ route, navigation }) {
         {!isMyMessage && (
           <Text style={styles.senderName}>{item.sender?.username}</Text>
         )}
-        
+
         {item.message_type === 'PROOF' ? (
-  <View style={styles.proofMessage}>
-    {item.proof_image && (
-      <Image
-        // ÇÖZÜM BURADA:
-        source={{ 
-          uri: encodeURI(`${baseURL}${item.proof_image.startsWith('/') ? '' : '/'}${item.proof_image}`)
-        }}
-        style={styles.proofImage}
-        resizeMode="cover"
-      />
-    )}
+          <View style={styles.proofMessage}>
+            {item.proof_image && (
+              <Image
+                source={{ uri: getImageUrl(item.proof_image) }}
+                style={styles.proofImage}
+                resizeMode="cover"
+              />
+            )}
             {item.content && <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>}
             <View style={styles.proofStatusContainer}>
               <Text style={[styles.proofStatus, isMyMessage && styles.myMessageText]}>
@@ -336,7 +333,7 @@ export default function Chat({ route, navigation }) {
         ) : (
           <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>
         )}
-        
+
         <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
           {formatTime(item.created_at)}
         </Text>
