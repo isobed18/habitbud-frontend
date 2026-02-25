@@ -11,12 +11,19 @@
 ## 📋 İçindekiler
 
 1. [Authentication](#1-authentication)
-2. [Users](#2-users)
-3. [Habits](#3-habits)
-4. [Friends](#4-friends)
-5. [Chat & Conversations](#5-chat--conversations)
+2. [Habits](#2-habits)
+3. [Friends](#3-friends)
+4. [Chat & Conversations](#4-chat--conversations)
+5. [Stories](#5-stories)
 6. [Proof Submission & Verification](#6-proof-submission--verification)
-7. [WebSocket](#7-websocket)
+7. [~~AI Coach & Assistant~~](#7-ai-coach--assistant) *(Shelved - returns 503)*
+8. [Challenges & Rewards](#8-challenges--rewards)
+9. [WebSocket](#9-websocket)
+10. [Gamification Mechanics](#10-gamification-mechanics)
+11. [User Search](#11-user-search)
+12. [Notifications](#12-notifications)
+13. [Achievements](#13-achievements)
+14. [Health Check](#14-health-check)
 
 ---
 
@@ -152,7 +159,7 @@
 
 ---
 
-### 1.5 Update Profile
+### 1.6 Update Profile
 **PUT** `/users/api/profile/`
 
 **Authentication:** Required
@@ -180,7 +187,7 @@
 
 ---
 
-### 1.6 Leaderboard
+### 1.7 Leaderboard
 **GET** `/users/api/leaderboard/`
 
 **Authentication:** Required
@@ -674,9 +681,9 @@
 
 ---
 
-## 4. AI Coach
+## 7. AI Coach & Assistant
 
-### 4.1 AI Habit Coach
+### 7.1 AI Habit Coach
 **POST** `/chat/ai-coach/`
 
 Get personalized coaching advice. The AI now analyzes your **last 7 days of history** and **recent chat context** for trend-aware guidance.
@@ -698,7 +705,7 @@ Get personalized coaching advice. The AI now analyzes your **last 7 days of hist
 }
 ```
 
-### 4.2 AI Agent
+### 7.2 AI Agent
 **POST** `/chat/ai-agent/`
 
 Execute complex objectives using the IO.net Custom Agent (Workflows).
@@ -773,8 +780,11 @@ Returns active (non-expired) stories from friends and self.
 }
 ```
 
+---
 
-### 5.1 Submit Proof (Social)
+## 6. Proof Submission & Verification
+
+### 6.1 Submit Proof (Social)
 **POST** `/chat/proof/submit/`
 
 **Authentication:** Required
@@ -798,7 +808,7 @@ Returns active (non-expired) stories from friends and self.
 }
 ```
 
-### 5.2 Submit AI Proof (Solo)
+### 6.2 Submit AI Proof (Solo)
 **POST** `/chat/proof/ai/`
 
 **Authentication:** Required
@@ -824,7 +834,7 @@ Returns active (non-expired) stories from friends and self.
 
 ---
 
-### 5.2 Verify/Reject Proof
+### 6.3 Verify/Reject Proof
 **POST** `/chat/proof/{message_id}/verify/`
 
 **Authentication:** Required
@@ -866,9 +876,9 @@ Returns active (non-expired) stories from friends and self.
 
 ---
 
-## 6. WebSocket
+## 9. WebSocket
 
-### 6.1 WebSocket Connection
+### 9.1 WebSocket Connection
 **WebSocket** `ws://localhost:8000/ws/chat/{conversation_id}/?token={jwt_token}`
 
 **Authentication:** JWT Token (query parameter or Authorization header)
@@ -889,7 +899,7 @@ const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=$
 
 ---
 
-### 6.2 Send Message (via WebSocket)
+### 9.2 Send Message (via WebSocket)
 **Message Format:**
 ```json
 {
@@ -913,7 +923,7 @@ const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=$
 const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=${accessToken}`);
 ```
 
-### 6.2 System Notifications (Global)
+### 9.3 System Notifications (Global)
 The backend pushes system-wide events (like Level Up) to the user via WebSocket.
 
 **Event: Level Up**
@@ -932,14 +942,14 @@ The backend pushes system-wide events (like Level Up) to the user via WebSocket.
 
 ---
 
-## 8. Gamification Mechanics
+## 10. Gamification Mechanics
 
-### 8.1 XP & Leveling Curve
+### 10.1 XP & Leveling Curve
 The system uses a **Non-Linear Progression** curve (Square Root).
 - Formula: `Level = Sqrt(XP / 50) + 1`
 - Early levels are fast, later levels require exponentially more XP.
 
-### 8.2 Streak Multipliers (Snapchat Style)
+### 10.2 Streak Multipliers (Snapchat Style)
 Consistency is rewarded with bonus XP.
 - **Components:** `Verified Habits` (AI/Social) and `Daily Completions`.
 - **Base XP:** 10 per completion.
@@ -950,7 +960,7 @@ Consistency is rewarded with bonus XP.
 
 ---
 
-### 6.3 Typing Indicator
+### 9.4 Typing Indicator
 **Send:**
 ```json
 {
@@ -991,9 +1001,9 @@ Consistency is rewarded with bonus XP.
 
 ---
 
-## 9. Challenges & Rewards
+## 8. Challenges & Rewards
 
-### 9.1 List Templates
+### 8.1 List Templates
 **GET** `/challenges/templates/`
 
 List all system-defined challenges (Solo/Duo) and their rewards.
@@ -1015,23 +1025,31 @@ List all system-defined challenges (Solo/Duo) and their rewards.
 ]
 ```
 
-### 9.2 Join Challenge
+### 8.2 Join Challenge
 **POST** `/challenges/join/{template_id}/`
 
 **Authentication:** Required
 
 **Rules:** Joining a challenge **automatically creates a matched habit** for you.
-- SOLO: Habit created immediately, status is ACTIVE.
-- DUO: Status is PENDING. Habit is created only after partner accepts.
+- SOLO: Habit created immediately, status is ACTIVE. **Must NOT provide** `partner_id`.
+- DUO: Status is PENDING. Habit is created only after partner accepts. **MUST provide** `partner_id`.
+- **Mutual Auto-Accept:** If your partner recently invited YOU to the same challenge, joining will **immediately Activate** the challenge for both.
 
 **Request Body:**
 ```json
 {
-  "partner_id": "uuid" // Optional, required for DUO
+  "partner_id": "uuid" // Required for DUO, Forbidden for SOLO
 }
 ```
 
-### 9.3 Withdraw Invitation
+
+
+**Error Responses:**
+- `400 Bad Request`: "Solo challenges cannot have a partner."
+- `400 Bad Request`: "partner_id is required for Duo challenges."
+- `400 Bad Request`: "You cannot be your own partner."
+
+### 8.3 Withdraw Invitation
 **POST** `/challenges/withdraw/{challenge_id}/`
 
 **Authentication:** Required
@@ -1040,7 +1058,7 @@ Allows the creator to cancel a PENDING Duo invitation.
 
 **Response:** `200 OK`
 
-### 9.4 Accept/Reject Challenge
+### 8.4 Accept/Reject Challenge
 **POST** `/challenges/accept/{challenge_id}/`
 
 **Request Body:**
@@ -1051,7 +1069,32 @@ Allows the creator to cancel a PENDING Duo invitation.
 ```
 **Note:** On `accept`, matched habits are automatically created for BOTH the creator and the partner.
 
-### 9.6 Reward Scaling
+### 8.5 Active Challenges
+**GET** `/challenges/active/`
+
+Returns active and pending challenges. Use `waiting_for_me` to determine UI action.
+
+**Response:** `200 OK`
+```json
+[
+  {
+     "id": "uuid",
+     "template": { ... },
+     "status": "ACTIVE" | "PENDING",
+     "waiting_for_me": true, // TRUE if YOU need to accept/reject. FALSE if waiting for partner.
+     "current_streak": 5,
+     ...
+  }
+]
+```
+
+### 8.6 Duo Verification
+**POST** `/challenges/{challenge_id}/verify/`
+
+Used in Duo challenges. Friend A verifies that Friend B completed their habit today.
+- **Rules:** Streak advances only if BOTH complete habits and BOTH verify each other.
+
+### 8.7 Reward Scaling
 Challenges now award **separate XP and Points**. 
 - The `reward_points` from the template are added on top of the base points awarded per habit completion. 
 - This ensures challenge completions are highly lucrative for the future market.
@@ -1127,3 +1170,152 @@ await fetch(`http://localhost:8000/habits/${habit.id}/`, {
 const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}/?token=${access}`);
 ```
 
+---
+
+## 11. User Search
+
+### 11.1 Search Users
+**GET** `/users/api/search/?q={query}`
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `q`: Search string (min 2 characters)
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "username": "string",
+    "email": "string",
+    "bio": "string",
+    "xp": 0,
+    "level": 1,
+    "points": 0,
+    "avatar": "url or null"
+  }
+]
+```
+
+---
+
+## 12. Notifications
+
+### 12.1 List Notifications
+**GET** `/users/api/notifications/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "title": "string",
+    "message": "string",
+    "notification_type": "INFO|SUCCESS|WARNING|AI_AGENT",
+    "is_read": false,
+    "created_at": "datetime"
+  }
+]
+```
+
+### 12.2 Mark Notification as Read
+**POST** `/users/api/notifications/{notification_id}/read/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+{ "message": "Notification marked as read." }
+```
+
+### 12.3 Mark All Notifications as Read
+**POST** `/users/api/notifications/read-all/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+{ "message": "5 notifications marked as read." }
+```
+
+---
+
+## 13. Achievements
+
+### 13.1 List Achievements
+**GET** `/achievements/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "name": "string",
+    "description": "string",
+    "icon": "url or null",
+    "date_awarded": "datetime",
+    "challenge": "uuid or null"
+  }
+]
+```
+
+---
+
+## 14. Health Check
+
+### 14.1 Health Check
+**GET** `/api/health/`
+
+**Authentication:** Not required
+
+**Response:** `200 OK`
+```json
+{ "status": "ok", "service": "habitbud-backend" }
+```
+
+---
+
+## 15. Friend Remove
+
+### 15.1 Remove Friend
+**DELETE** `/friends/remove/{friend_user_id}/`
+
+**Authentication:** Required
+
+**Response:** `200 OK`
+```json
+{ "message": "Friend removed." }
+```
+
+---
+
+## Changelog
+
+### v2.0.0 (2026-02-25) - Production Ready
+
+**Breaking Changes:**
+- AI proof verification is **shelved** (endpoints return `503 Service Unavailable`)
+- Social proof no longer requires AI verification first
+- `posts` app removed
+
+**New Endpoints:**
+- `GET /api/health/` - Health check
+- `GET /users/api/search/?q=` - User search
+- `GET /users/api/notifications/` - Notification list
+- `POST /users/api/notifications/{id}/read/` - Mark notification read
+- `POST /users/api/notifications/read-all/` - Mark all read
+- `GET /achievements/` - Achievement list
+- `DELETE /friends/remove/{id}/` - Remove friend
+
+**Enhancements:**
+- Friend list now includes `friendship_streak` and `last_interaction_date`
+- Environment-based configuration (SECRET_KEY, DEBUG, DATABASE_URL)
+- PostgreSQL support with SQLite fallback
+- Redis/InMemory channel layer auto-detection
+- Production security headers
+- Logging configuration
