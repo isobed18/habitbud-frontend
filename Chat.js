@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Chat({ route, navigation }) {
   const { conversationId } = route.params;
@@ -49,19 +50,30 @@ export default function Chat({ route, navigation }) {
       const response = await axiosInstance.get(`chat/conversations/${conversationId}/messages/`);
       setMessages(response.data);
 
-      // Get other user from first message or conversation
       // Get other user from messages
       if (response.data.length > 0 && currentUserId) {
-        // Find other participant (not the current user)
         const otherMessage = response.data.find(msg => msg.sender.id !== currentUserId);
         if (otherMessage) {
           setOtherUser(otherMessage.sender);
         } else if (response.data[0]) {
-          // If all messages are from current user, set first message sender as other (fallback)
           setOtherUser(response.data[0].sender);
         }
       } else if (response.data.length > 0 && !currentUserId) {
         setOtherUser(response.data[0].sender);
+      }
+
+      // Fallback: fetch conversation details to get other participant
+      if (!otherUser) {
+        try {
+          const convRes = await axiosInstance.get(`chat/conversations/${conversationId}/`);
+          const conv = convRes.data;
+          if (conv.participants) {
+            const other = conv.participants.find(p => p.id !== currentUserId);
+            if (other) setOtherUser(other);
+          } else if (conv.other_user) {
+            setOtherUser(conv.other_user);
+          }
+        } catch (e) { /* silent fallback */ }
       }
     } catch (error) {
       console.error('Error fetching messages:', error.response?.data || error.message);
@@ -237,8 +249,7 @@ export default function Chat({ route, navigation }) {
     } catch (error) {
       console.error('Error verifying proof:', error.response?.data || error.message);
       const errorMsg = error.response?.data?.error ||
-        Object.values(error.response?.data || {}).flat().join(', ') ||
-        'İşlem başarısız oldu.';
+        (typeof error.response?.data === 'string' ? error.response.data : 'İşlem başarısız oldu.');
       Alert.alert('Hata!', errorMsg);
     }
   };
@@ -348,13 +359,20 @@ export default function Chat({ route, navigation }) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Geri</Text>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </Pressable>
-        <Text style={styles.headerTitle}>
-          {otherUser ? otherUser.username : 'Sohbet'}
-        </Text>
-        <View style={{ width: 60 }} />
+        <View style={styles.headerCenter}>
+          {otherUser && (
+            <View style={styles.headerAvatar}>
+              <Text style={styles.headerAvatarText}>{otherUser.username.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          <Text style={styles.headerTitle}>
+            {otherUser ? otherUser.username : 'Sohbet'}
+          </Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <FlatList
@@ -375,10 +393,10 @@ export default function Chat({ route, navigation }) {
 
       <View style={styles.inputContainer}>
         <Pressable
-          style={[styles.button, styles.proofButton]}
+          style={styles.cameraBtn}
           onPress={() => navigation.navigate('SubmitProof', { conversationId })}
         >
-          <Text style={styles.buttonText}>📷</Text>
+          <Ionicons name="camera" size={22} color="#667eea" />
         </Pressable>
         <TextInput
           style={styles.input}
@@ -393,7 +411,7 @@ export default function Chat({ route, navigation }) {
           onPress={sendMessage}
           disabled={!inputText.trim()}
         >
-          <Text style={styles.sendButtonText}>Gönder</Text>
+          <Ionicons name="send" size={20} color="#fff" />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -403,64 +421,89 @@ export default function Chat({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f5f6fa',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 50,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#eee',
   },
-  backButton: {
+  backBtn: {
+    padding: 4,
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#667eea',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerAvatarText: {
+    color: '#fff',
+    fontWeight: '700',
     fontSize: 16,
-    color: '#007BFF',
-    fontWeight: '600',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#333',
   },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
-    padding: 10,
+    padding: 12,
+    paddingBottom: 20,
   },
   messageContainer: {
-    maxWidth: '75%',
+    maxWidth: '78%',
     padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
+    borderRadius: 18,
+    marginBottom: 8,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#007BFF',
+    backgroundColor: '#667eea',
+    borderBottomRightRadius: 4,
   },
   otherMessage: {
     alignSelf: 'flex-start',
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    borderBottomLeftRadius: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   senderName: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666',
+    color: '#667eea',
     marginBottom: 4,
   },
   messageText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#333',
+    lineHeight: 20,
   },
   myMessageText: {
     color: '#fff',
   },
   messageTime: {
     fontSize: 10,
-    color: '#999',
+    color: '#bbb',
     marginTop: 4,
     alignSelf: 'flex-end',
   },
@@ -469,30 +512,25 @@ const styles = StyleSheet.create({
   },
   verifyButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginTop: 10,
   },
   verifyButton: {
     flex: 1,
     padding: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
   },
   verifyAcceptButton: {
-    backgroundColor: '#28A745',
+    backgroundColor: '#10b981',
   },
   verifyRejectButton: {
-    backgroundColor: '#DC3545',
+    backgroundColor: '#ef4444',
   },
   verifyButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-  },
-  proofButton: {
-    padding: 10,
-    marginRight: 5,
-    backgroundColor: '#6C757D',
   },
   proofMessage: {
     alignItems: 'center',
@@ -500,13 +538,14 @@ const styles = StyleSheet.create({
   proofImage: {
     width: 200,
     height: 200,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
   },
   proofStatusContainer: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: '#f0f0f0',
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.05)',
     borderRadius: 8,
   },
   proofStatus: {
@@ -526,35 +565,41 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 10,
+    paddingBottom: 30,
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: '#eee',
     alignItems: 'flex-end',
+  },
+  cameraBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(103, 126, 234, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   input: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
-    paddingHorizontal: 15,
+    backgroundColor: '#f5f6fa',
+    borderRadius: 22,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     maxHeight: 100,
-    fontSize: 16,
-    marginRight: 10,
+    fontSize: 15,
+    marginRight: 8,
   },
   sendButton: {
-    backgroundColor: '#007BFF',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#667eea',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sendButtonDisabled: {
     backgroundColor: '#ccc',
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
   },
 });
 

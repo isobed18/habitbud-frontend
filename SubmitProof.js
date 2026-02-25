@@ -149,14 +149,14 @@ export default function SubmitProof({ route, navigation }) {
       Alert.alert('Uyarı', 'Lütfen en az bir arkadaş seçin.');
       return;
     }
-    if ((!verificationResult && !sharingHabitId) || !image) {
+    if ((!sharingHabitId) || !image) {
       Alert.alert('Hata', 'Gerekli veriler eksik.');
       return;
     }
 
     setSendingToFriends(true);
     try {
-      const hId = sharingHabitId || verificationResult?.habitId;
+      const hId = sharingHabitId;
       if (!hId) throw new Error('Habit ID not found for sharing');
 
       const promises = selectedFriends.map(friendId => {
@@ -182,7 +182,6 @@ export default function SubmitProof({ route, navigation }) {
       setSendingToFriends(false);
       setModalStep('none');
       setSharingHabitId(null);
-      setVerificationResult(null);
       navigation.goBack();
       Alert.alert('Başarılı! 🚀', 'Arkadaşlarına doğrulama isteği gönderildi.');
     } catch (error) {
@@ -192,7 +191,7 @@ export default function SubmitProof({ route, navigation }) {
   };
 
   const shareToStoryAndContinue = async () => {
-    const hId = sharingHabitId || verificationResult?.habitId;
+    const hId = sharingHabitId;
     await createStory(hId);
     setModalStep('friends');
   };
