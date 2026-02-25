@@ -20,6 +20,7 @@ import axiosInstance from './services/axiosInstance';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
+import XPToast from './components/XPToast';
 
 const getThemeColor = (indexOrKey) => {
   return getHabitColor(indexOrKey);
@@ -73,6 +74,10 @@ export default function Home({ navigation }) {
   const [statsModalVisible, setStatsModalVisible] = useState(false);
   const [activeStats, setActiveStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  // XP Toast
+  const [xpGained, setXpGained] = useState(0);
+  const [showXP, setShowXP] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -356,8 +361,11 @@ export default function Home({ navigation }) {
 
                     if (newCount >= item.target_count) {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      // Show Multiplier Animation or Alert here
                       const mult = calculateStreakMultiplier(item.streak);
+                      const baseXP = 10;
+                      const earnedXP = Math.round(baseXP * mult);
+                      setXpGained(earnedXP);
+                      setShowXP(true);
                       const bonusMsg = mult > 1.0 ? `\n${mult}x Bonus XP!` : '';
                       Alert.alert('Tebrikler! 🎉', `Hedefine ulaştın!${bonusMsg}`, [{ text: 'Kanıt Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) }]);
                     } else {
@@ -399,6 +407,7 @@ export default function Home({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <XPToast xp={xpGained} visible={showXP} onDone={() => setShowXP(false)} />
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderCalendarStrip()}
         <View style={styles.listContainer}>
