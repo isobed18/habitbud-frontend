@@ -28,7 +28,6 @@ export default function SubmitProof({ route, navigation }) {
   const [selectedHabitId, setSelectedHabitId] = useState(habitId || null);
   const [image, setImage] = useState(null);
   const [content, setContent] = useState('');
-  const [verificationResult, setVerificationResult] = useState(null);
 
   // Friend Selection
   const [friends, setFriends] = useState([]);
@@ -88,42 +87,18 @@ export default function SubmitProof({ route, navigation }) {
     if (!image) { Alert.alert('Hata', 'Fotoğraf çekmediniz.'); return; }
 
     setLoading(true);
-    setVerificationResult(null);
 
     try {
       if (isStory) {
-        // Direct story creation bypasses AI verification
         await createStory(selectedHabitId);
         setLoading(false);
         return;
       }
 
-      const formData = new FormData();
-      formData.append('habit_id', selectedHabitId);
-      formData.append('proof_image', {
-        uri: image.uri,
-        type: 'image/jpeg',
-        name: 'proof.jpg',
-      });
-
-      const response = await axiosInstance.post('chat/proof/ai/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      setLoading(false);
-      const { ai_status } = response.data;
-      const isVerified = ai_status?.verified === true;
-
-      setVerificationResult({
-        success: isVerified,
-        title: isVerified ? 'Harika! Doğrulandı 🎉' : 'Doğrulanamadı 😔',
-        message: ai_status?.motivational_message || ai_status?.reason || (isVerified ? 'Kanıtın kabul edildi.' : 'Bunu kabul edemedik.'),
-        xp: response.data.xp_awarded || 0,
-        habitId: selectedHabitId
-      });
+      // Go directly to share step (story + friends)
       setSharingHabitId(selectedHabitId);
-      setModalStep('result');
-
+      setLoading(false);
+      setModalStep('share');
     } catch (error) {
       setLoading(false);
       console.error('Submit Proof Error Detail:', error.response?.data || error.message);
@@ -287,7 +262,7 @@ export default function SubmitProof({ route, navigation }) {
           onPress={submitProof}
           disabled={!image || !selectedHabitId || loading}
         >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Yapay Zekaya Gönder 🚀</Text>}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Paylaş 🚀</Text>}
         </Pressable>
 
         <Pressable style={styles.cancelBtn} onPress={() => navigation.goBack()}>
@@ -297,42 +272,39 @@ export default function SubmitProof({ route, navigation }) {
 
       {/* Unified Modal */}
       <Modal visible={modalStep !== 'none'} animationType="slide" transparent={true}>
-        {modalStep === 'result' ? (
+        {modalStep === 'share' ? (
           <View style={styles.modalOverlay}>
             <View style={styles.successCard}>
-              <View style={[styles.iconBadge, { backgroundColor: verificationResult?.success ? '#22c55e' : '#ef4444' }]}>
-                <Ionicons name={verificationResult?.success ? "checkmark" : "close"} size={30} color="#fff" />
+              <View style={[styles.iconBadge, { backgroundColor: '#8b5cf6' }]}>
+                <Ionicons name="share-social" size={30} color="#fff" />
               </View>
-              <Text style={styles.resultTitle}>{verificationResult?.title}</Text>
-              <Text style={styles.resultMsg}>{verificationResult?.message}</Text>
-              {verificationResult?.xp > 0 && <Text style={styles.xpText}>+{verificationResult.xp} XP / Puan</Text>}
+              <Text style={styles.resultTitle}>Kanıtını Paylaş! 🎉</Text>
+              <Text style={styles.resultMsg}>Arkadaşlarınla veya hikayende paylaş</Text>
 
-              {verificationResult?.success && (
-                <View style={{ width: '100%', gap: 10 }}>
-                  <Pressable
-                    style={[styles.socialBtn, { backgroundColor: '#8b5cf6' }]}
-                    onPress={shareToStoryAndContinue}
-                    disabled={postingToStory}
-                  >
-                    {postingToStory ? <ActivityIndicator color="#fff" /> : (
-                      <>
-                        <Ionicons name="images" size={20} color="#fff" />
-                        <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Hikayeme Ekle ve Devam Et</Text>
-                      </>
-                    )}
-                  </Pressable>
+              <View style={{ width: '100%', gap: 10 }}>
+                <Pressable
+                  style={[styles.socialBtn, { backgroundColor: '#8b5cf6' }]}
+                  onPress={shareToStoryAndContinue}
+                  disabled={postingToStory}
+                >
+                  {postingToStory ? <ActivityIndicator color="#fff" /> : (
+                    <>
+                      <Ionicons name="images" size={20} color="#fff" />
+                      <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Hikayeme Ekle</Text>
+                    </>
+                  )}
+                </Pressable>
 
-                  <Pressable
-                    style={styles.socialBtn}
-                    onPress={() => setModalStep('friends')}
-                  >
-                    <Ionicons name="send" size={20} color="#fff" />
-                    <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Arkadaşlara Gönder</Text>
-                  </Pressable>
-                </View>
-              )}
+                <Pressable
+                  style={styles.socialBtn}
+                  onPress={() => setModalStep('friends')}
+                >
+                  <Ionicons name="send" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Arkadaşlara Gönder</Text>
+                </Pressable>
+              </View>
 
-              <Pressable style={styles.closeModalBtn} onPress={() => { setModalStep('none'); if (verificationResult?.success) navigation.goBack(); }}>
+              <Pressable style={styles.closeModalBtn} onPress={() => { setModalStep('none'); navigation.goBack(); }}>
                 <Text style={{ color: '#666' }}>Kapat</Text>
               </Pressable>
             </View>

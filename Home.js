@@ -187,9 +187,7 @@ export default function Home({ navigation }) {
           <Text style={styles.monthTitle}>{currentDate.toLocaleString('default', { month: 'long' })} {currentDate.getFullYear()}</Text>
         </Pressable>
         <Pressable onPress={() => changeWeek(1)}><Ionicons name="chevron-forward" size={24} color="#666" /></Pressable>
-        <Pressable onPress={() => navigation.navigate('AICoach')} style={styles.coachButton}>
-          <Ionicons name="sparkles" size={20} color="#fff" />
-        </Pressable>
+
       </View>
       <View style={styles.daysRow}>
         {weekDays.map((date, idx) => {

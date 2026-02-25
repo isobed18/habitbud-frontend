@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getAccessToken, getRefreshToken, saveToken, removeTokens } from '../utils/auth';
+import { getAccessToken, getRefreshToken, saveTokens, removeTokens } from '../utils/auth';
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
@@ -54,7 +54,7 @@ axiosInstance.interceptors.response.use(
                         refresh: refreshToken,
                     });
                     const newAccessToken = response.data.access;
-                    await saveToken(newAccessToken, refreshToken);
+                    await saveTokens(newAccessToken, refreshToken);
 
                     axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
                     originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;

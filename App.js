@@ -16,7 +16,7 @@ import SubmitProof from './SubmitProof';
 import Leaderboard from './Leaderboard';
 import Conversations from './Conversations';
 import Chat from './Chat';
-import AICoach from './AICoach';
+
 import FriendProfile from './FriendProfile';
 import Challenges from './Challenges';
 import AddHabit from './AddHabit';
@@ -165,7 +165,7 @@ export default function App() {
               options={{ animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="Chat" component={Chat} />
-            <Stack.Screen name="AICoach" component={AICoach} options={{ animation: 'slide_from_right' }} />
+
             <Stack.Screen name="FriendProfile" component={FriendProfile} options={{ animation: 'slide_from_right' }} />
 
             <Stack.Screen

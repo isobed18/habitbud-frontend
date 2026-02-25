@@ -259,26 +259,6 @@ export default function Conversations({ navigation }) {
         }
       />
 
-      {/* Floating Bottom Bar */}
-      <View style={styles.bottomBarContainer}>
-        <View style={styles.bottomBar}>
-          <Pressable style={styles.navIcon} onPress={() => navigation.navigate('Leaderboard')}>
-            <Ionicons name="stats-chart" size={24} color="#ccc" />
-          </Pressable>
-
-          <Pressable style={styles.fab} onPress={() => navigation.navigate('Home')}>
-            <Ionicons name="home" size={28} color="#fff" />
-          </Pressable>
-
-          <Pressable style={styles.navIcon}>
-            <Ionicons name="chatbubbles" size={24} color="#ff7f50" />
-          </Pressable>
-
-          <Pressable style={styles.navIcon} onPress={() => navigation.navigate('Profile')}>
-            <Ionicons name="person-outline" size={24} color="#ccc" />
-          </Pressable>
-        </View>
-      </View>
 
       {/* Story Modal */}
       <Modal visible={storyModalVisible} animationType="fade" transparent>
