@@ -20,6 +20,8 @@ import Chat from './Chat';
 import FriendProfile from './FriendProfile';
 import Challenges from './Challenges';
 import AddHabit from './AddHabit';
+import Notifications from './Notifications';
+import Achievements from './Achievements';
 
 // Utils & Services
 import { getAccessToken } from './utils/auth';
@@ -167,6 +169,8 @@ export default function App() {
             <Stack.Screen name="Chat" component={Chat} />
 
             <Stack.Screen name="FriendProfile" component={FriendProfile} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Notifications" component={Notifications} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Achievements" component={Achievements} options={{ animation: 'slide_from_right' }} />
 
             <Stack.Screen
               name="AddHabitModal"

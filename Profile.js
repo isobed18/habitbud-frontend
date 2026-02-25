@@ -11,6 +11,7 @@ import {
   ScrollView,
   Dimensions,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -34,6 +35,10 @@ const ProfilePage = ({ navigation }) => {
   const [friends, setFriends] = useState([]);
   const [username, setUsername] = useState('');
   const [showPopup, setShowPopup] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [inventoryVisible, setInventoryVisible] = useState(false);
   const [editEmail, setEditEmail] = useState('');
@@ -47,6 +52,7 @@ const ProfilePage = ({ navigation }) => {
     fetchProfile();
     fetchFriendRequests();
     fetchFriends();
+    fetchUnreadCount();
   }, []);
 
   const fetchProfile = async () => {
@@ -73,6 +79,37 @@ const ProfilePage = ({ navigation }) => {
       const response = await axiosInstance.get('friends/list/');
       setFriends(response.data);
     } catch (error) { console.error(error); }
+  };
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await axiosInstance.get('users/api/notifications/');
+      const unread = response.data.filter(n => !n.is_read).length;
+      setUnreadCount(unread);
+    } catch (e) { /* silent */ }
+  };
+
+  const searchUsers = async (query) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await axiosInstance.get(`users/api/search/?q=${query}`);
+      setSearchResults(response.data);
+    } catch (e) {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSearchInput = (text) => {
+    setUsername(text);
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const timeout = setTimeout(() => searchUsers(text), 400);
+    setSearchTimeout(timeout);
   };
 
   const fetchInventory = async () => {
@@ -184,7 +221,22 @@ const ProfilePage = ({ navigation }) => {
   // Renderers
   const renderProfileHeader = () => (
     <View style={styles.headerContainer}>
-      <Text style={styles.pageTitle}>Profil</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
+        <Text style={styles.pageTitle}>Profil</Text>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPress={() => navigation.navigate('Achievements')} style={{ padding: 4 }}>
+            <Ionicons name="ribbon-outline" size={24} color="#333" />
+          </Pressable>
+          <Pressable onPress={() => { navigation.navigate('Notifications'); fetchUnreadCount(); }} style={{ padding: 4 }}>
+            <Ionicons name="notifications-outline" size={24} color="#333" />
+            {unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+      </View>
       {profile && (
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}>
@@ -299,7 +351,15 @@ const ProfilePage = ({ navigation }) => {
           </View>
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>{item.username}</Text>
-            <Text style={styles.cardSubtitle}>{item.bio || 'Müsait'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              {item.friendship_streak > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                  <Ionicons name="flame" size={14} color="#f97316" />
+                  <Text style={{ fontSize: 12, color: '#f97316', fontWeight: '600' }}>{item.friendship_streak}g</Text>
+                </View>
+              )}
+              <Text style={styles.cardSubtitle}>{item.bio || 'Müsait'}</Text>
+            </View>
           </View>
           <Pressable style={[styles.miniBtn, { backgroundColor: '#3b82f6' }]} onPress={() => startConversation(item.id)}>
             <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
@@ -344,13 +404,37 @@ const ProfilePage = ({ navigation }) => {
             <Text style={styles.modalHeader}>Arkadaş Ekle</Text>
             <TextInput
               style={styles.input}
-              placeholder="Kullanıcı Adı"
+              placeholder="Kullanıcı ara (en az 2 karakter)"
               value={username}
-              onChangeText={setUsername}
+              onChangeText={handleSearchInput}
               autoCapitalize="none"
             />
+            {searching && <ActivityIndicator size="small" color="#667eea" style={{ marginVertical: 8 }} />}
+            {searchResults.length > 0 && (
+              <View style={styles.searchResults}>
+                {searchResults.map(user => (
+                  <Pressable
+                    key={user.id}
+                    style={styles.searchResultItem}
+                    onPress={() => {
+                      setUsername(user.username);
+                      setSearchResults([]);
+                    }}
+                  >
+                    <View style={[styles.searchAvatar, { backgroundColor: '#667eea' }]}>
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>{user.username.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '600', color: '#333' }}>{user.username}</Text>
+                      <Text style={{ fontSize: 12, color: '#999' }}>Lvl {user.level || 1} · {user.xp || 0} XP</Text>
+                    </View>
+                    <Ionicons name="person-add" size={18} color="#667eea" />
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <View style={styles.modalActions}>
-              <Pressable style={[styles.btn, { backgroundColor: '#ccc' }]} onPress={() => setShowPopup(false)}>
+              <Pressable style={[styles.btn, { backgroundColor: '#ccc' }]} onPress={() => { setShowPopup(false); setSearchResults([]); setUsername(''); }}>
                 <Text>İptal</Text>
               </Pressable>
               <Pressable style={[styles.btn, { backgroundColor: '#22c55e' }]} onPress={sendFriendRequest}>
@@ -531,6 +615,15 @@ const styles = StyleSheet.create({
   reminderTitle: { fontWeight: 'bold', fontSize: 16, color: '#333' },
   reminderMsg: { fontSize: 14, color: '#666', marginTop: 2 },
   reminderTime: { fontSize: 12, color: '#8b5cf6', marginTop: 5, fontWeight: '600' },
+
+  // Notification Badge
+  notifBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#ef4444', width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  notifBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  // Search Results
+  searchResults: { maxHeight: 200, marginBottom: 10, borderRadius: 12, backgroundColor: '#f8f9fa', overflow: 'hidden' },
+  searchResultItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  searchAvatar: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
 });
 
 export default ProfilePage;

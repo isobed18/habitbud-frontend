@@ -7,8 +7,10 @@ import {
     ActivityIndicator,
     Pressable,
     FlatList,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { getHabitColor } from './utils/colors';
 
@@ -30,6 +32,30 @@ export default function FriendProfile({ route, navigation }) {
         } finally {
             setLoading(false);
         }
+    };
+
+    const removeFriend = () => {
+        Alert.alert(
+            'Arkadaşlıktan Çıkar',
+            'Bu kişiyi arkadaş listenizden çıkarmak istediğinize emin misiniz?',
+            [
+                { text: 'Vazgeç', style: 'cancel' },
+                {
+                    text: 'Çıkar', style: 'destructive', onPress: async () => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        try {
+                            await axiosInstance.delete(`friends/remove/${userId}/`);
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            Alert.alert('Başarılı', 'Arkadaş kaldırıldı.');
+                            navigation.goBack();
+                        } catch (error) {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                            Alert.alert('Hata', 'Arkadaş kaldırılamadı.');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const renderHabitItem = ({ item }) => {
@@ -113,6 +139,12 @@ export default function FriendProfile({ route, navigation }) {
                         ))}
                     </View>
                 )}
+
+                {/* Remove Friend Button */}
+                <Pressable style={styles.removeBtn} onPress={removeFriend}>
+                    <Ionicons name="person-remove-outline" size={18} color="#ef4444" />
+                    <Text style={styles.removeBtnText}>Arkadaşlıktan Çıkar</Text>
+                </Pressable>
             </ScrollView>
         </View>
     );
@@ -142,5 +174,7 @@ const styles = StyleSheet.create({
     streakText: { fontSize: 13, marginLeft: 4 },
     badgeBox: { backgroundColor: 'rgba(255,255,255,0.5)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
     badgeText: { fontSize: 12, fontWeight: 'bold' },
-    errorText: { textAlign: 'center', marginTop: 50, color: '#ef4444' }
+    errorText: { textAlign: 'center', marginTop: 50, color: '#ef4444' },
+    removeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 30, paddingVertical: 14, backgroundColor: '#fee2e2', borderRadius: 14, borderWidth: 1, borderColor: '#fecaca' },
+    removeBtnText: { fontSize: 15, fontWeight: '600', color: '#ef4444' },
 });

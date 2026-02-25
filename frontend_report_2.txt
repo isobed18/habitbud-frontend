@@ -1,0 +1,70 @@
+HabitBud v2.0.0 — Frontend Migration Report
+Tarih: 2026-02-25
+Branch: production-ready
+Yazan: Backend Lead
+
+🔴 Kaldırılması Gerekenler
+1. AI Proof Akışı (Tamamen Kaldır)
+Eski akış: Habit tamamla → AI proof gönder → AI onaylarsa → Arkadaşa social proof gönder
+
+Yeni akış: Habit tamamla → Arkadaşa social proof gönder (AI adımı yok)
+
+POST /chat/proof/ai/ → 503 döner, frontend'den kaldırın
+POST /chat/ai-coach/ → 503 döner, kaldırın
+POST /chat/ai-agent/ → 503 döner, kaldırın
+AI onay bekleme ekranları/loading state'leri kaldırılmalı
+2. AI Verification Prerequisite
+Social proof gönderirken last_ai_verification_date kontrolü kaldırıldı. Artık sadece habit'in bugün tamamlanmış olması yeterli (
+is_completed_today()
+).
+
+CAUTION
+
+Frontend'de "Önce AI ile doğrula" uyarısı/bloğu varsa kaldırın.
+
+🟢 Eklenmesi Gerekenler
+1. User Search
+Arkadaş eklemek için kullanıcı arama:
+
+GET /users/api/search/?q=ish
+→ [{ id, username, email, bio, xp, level, points, avatar }]
+Minimum 2 karakter
+Kendi kullanıcıyı hariç tutar
+2. Notification Sistemi
+GET /users/api/notifications/
+→ [{ id, title, message, notification_type, is_read, created_at }]
+POST /users/api/notifications/{id}/read/
+→ { message: "Notification marked as read." }
+POST /users/api/notifications/read-all/
+→ { message: "5 notifications marked as read." }
+3. Achievement Listesi
+GET /achievements/
+→ [{ id, name, description, icon, date_awarded, challenge }]
+4. Arkadaş Silme
+DELETE /friends/remove/{friend_user_id}/
+→ { message: "Friend removed." }
+🟡 Değişen Response'lar
+Friend List (GET /friends/list/)
+Artık her arkadaş için streak bilgisi de döner:
+
+diff
+{
+   "id": "uuid",
+   "username": "john",
+-  "bio": "Hello"
++  "bio": "Hello",
++  "friendship_streak": 15,
++  "last_interaction_date": "2026-02-24"
+ }
+🔵 Yeni Altyapı
+Endpoint	Amaç
+GET /api/health/	Health check (auth gerekmez)
+Aksiyon Özeti
+Öncelik	Aksiyon	Detay
+🔴 P0	AI Proof akışını kaldır	Ekranlar, API çağrıları, loading state'leri
+🔴 P0	Social proof'u güncelle	AI prerequisite yok, direkt gönder
+🟢 P1	User search ekle	Arkadaş ekleme akışında
+🟢 P1	Notification UI ekle	Badge, list, mark read
+🟡 P2	Friend list'te streak göster	friendship_streak field'ı
+🟡 P2	Achievement sayfası	Badge/ödül listesi
+🟡 P2	Arkadaş silme butonu	Friend profil sayfasında
