@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 
 const { width } = Dimensions.get('window');
 
@@ -35,7 +36,7 @@ const Leaderboard = ({ navigation }) => {
     const fetchLeaderboard = async () => {
         try {
             const response = await axiosInstance.get('users/api/leaderboard/');
-            setLeaderboardData(response.data);
+            setLeaderboardData(unwrapPagination(response.data));
         } catch (error) {
             Alert.alert('Hata!', 'Liderlik tablosu yüklenemedi.');
         } finally {

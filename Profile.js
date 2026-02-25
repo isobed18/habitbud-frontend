@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 
 const { width } = Dimensions.get('window');
@@ -70,14 +71,14 @@ const ProfilePage = ({ navigation }) => {
   const fetchFriendRequests = async () => {
     try {
       const response = await axiosInstance.get('friends/requests/pending/');
-      setFriendRequests(response.data);
+      setFriendRequests(unwrapPagination(response.data));
     } catch (error) { console.error(error); }
   };
 
   const fetchFriends = async () => {
     try {
       const response = await axiosInstance.get('friends/list/');
-      setFriends(response.data);
+      setFriends(unwrapPagination(response.data));
     } catch (error) { console.error(error); }
   };
 
@@ -97,7 +98,7 @@ const ProfilePage = ({ navigation }) => {
     setSearching(true);
     try {
       const response = await axiosInstance.get(`users/api/search/?q=${query}`);
-      setSearchResults(response.data);
+      setSearchResults(unwrapPagination(response.data));
     } catch (e) {
       setSearchResults([]);
     } finally {
@@ -115,7 +116,7 @@ const ProfilePage = ({ navigation }) => {
   const fetchInventory = async () => {
     try {
       const res = await axiosInstance.get('users/items/');
-      setInventory(res.data);
+      setInventory(unwrapPagination(res.data));
     } catch (error) {
       console.error('Inventory fetch error:', error);
       setInventory([]);
@@ -125,7 +126,7 @@ const ProfilePage = ({ navigation }) => {
   const fetchReminders = async () => {
     try {
       const res = await axiosInstance.get('users/reminders/');
-      setReminders(res.data);
+      setReminders(unwrapPagination(res.data));
     } catch (error) {
       console.error('Reminders error:', error);
       setReminders([]);

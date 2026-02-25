@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 import EmptyState from './components/EmptyState';
 
 const TYPE_CONFIG = {
@@ -35,7 +36,7 @@ export default function Notifications({ navigation }) {
     const fetchNotifications = async () => {
         try {
             const response = await axiosInstance.get('users/api/notifications/');
-            setNotifications(response.data);
+            setNotifications(unwrapPagination(response.data));
         } catch (error) {
             console.error('Notifications fetch error:', error);
         } finally {

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 import EmptyState from './components/EmptyState';
 
 const ICON_MAP = {
@@ -31,7 +32,7 @@ export default function Achievements({ navigation }) {
     const fetchAchievements = async () => {
         try {
             const response = await axiosInstance.get('achievements/');
-            setAchievements(response.data);
+            setAchievements(unwrapPagination(response.data));
         } catch (error) {
             console.error('Achievements fetch error:', error);
         } finally {

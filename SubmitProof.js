@@ -16,6 +16,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import { getHabitColor } from './utils/colors'; // Reuse colors
 
@@ -52,7 +53,7 @@ export default function SubmitProof({ route, navigation }) {
       // Or filter to only those "completed" today if that's the rule?
       // User said "habit completed -> proof screen".
       const response = await axiosInstance.get(`habits/?t=${new Date().getTime()}`);
-      setHabits(response.data);
+      setHabits(unwrapPagination(response.data));
     } catch (error) {
       console.error(error);
     }
@@ -61,7 +62,7 @@ export default function SubmitProof({ route, navigation }) {
   const fetchFriends = async () => {
     try {
       const response = await axiosInstance.get('friends/list/');
-      setFriends(response.data);
+      setFriends(unwrapPagination(response.data));
     } catch (error) { console.error(error); }
   };
 

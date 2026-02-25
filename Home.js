@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
@@ -97,7 +98,7 @@ export default function Home({ navigation }) {
     try {
       const formattedDate = toLocalDateString(currentDate);
       const response = await axiosInstance.get(`habits/?date=${formattedDate}&t=${new Date().getTime()}`);
-      let fetched = response.data;
+      let fetched = unwrapPagination(response.data);
       fetched.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
       // Client-side date check

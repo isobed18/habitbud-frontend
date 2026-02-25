@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 
 const { width } = Dimensions.get('window');
 
@@ -45,7 +46,7 @@ export default function Conversations({ navigation }) {
   const fetchConversations = async () => {
     try {
       const response = await axiosInstance.get('chat/conversations/');
-      setConversations(response.data);
+      setConversations(unwrapPagination(response.data));
       fetchStories();
     } catch (error) { console.error(error); }
   };
@@ -53,7 +54,7 @@ export default function Conversations({ navigation }) {
   const fetchStories = async () => {
     try {
       const response = await axiosInstance.get('chat/stories/feed/');
-      setStoryGroups(response.data);
+      setStoryGroups(unwrapPagination(response.data));
     } catch (error) { console.error('Error fetching stories:', error); }
   };
 

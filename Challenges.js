@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
+import { unwrapPagination } from './utils/api';
 
 const { width } = Dimensions.get('window');
 
@@ -44,7 +45,7 @@ export default function Challenges({ navigation }) {
         try {
             if (tab === 'templates') {
                 const res = await axiosInstance.get('challenges/templates/');
-                setTemplates(res.data);
+                setTemplates(unwrapPagination(res.data));
                 fetchFriends();
             } else {
                 const [resActive, resCompleted] = await Promise.allSettled([
@@ -54,15 +55,15 @@ export default function Challenges({ navigation }) {
 
                 let allData = [];
                 if (resActive.status === 'fulfilled') {
-                    console.log('Active Challenges:', resActive.value.data.length);
-                    allData = [...allData, ...resActive.value.data];
+                    console.log('Active Challenges:', unwrapPagination(resActive.value.data).length);
+                    allData = [...allData, ...unwrapPagination(resActive.value.data)];
                 } else {
                     console.log('Active Fetch Failed:', resActive.reason);
                 }
 
                 if (resCompleted.status === 'fulfilled') {
-                    console.log('Completed Challenges:', resCompleted.value.data.length);
-                    allData = [...allData, ...resCompleted.value.data];
+                    console.log('Completed Challenges:', unwrapPagination(resCompleted.value.data).length);
+                    allData = [...allData, ...unwrapPagination(resCompleted.value.data)];
                 } else {
                     console.log('Completed Fetch Failed:', resCompleted.reason?.response?.status);
                 }
@@ -84,14 +85,14 @@ export default function Challenges({ navigation }) {
     const fetchFriends = async () => {
         try {
             const res = await axiosInstance.get('friends/list/');
-            setFriends(res.data);
+            setFriends(unwrapPagination(res.data));
         } catch (err) { console.error(err); }
     };
 
     const fetchHabits = async () => {
         try {
             const res = await axiosInstance.get('habits/');
-            setHabits(res.data);
+            setHabits(unwrapPagination(res.data));
         } catch (err) {
             console.error(err);
         }

@@ -14,6 +14,7 @@ import {
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
+import { unwrapPagination } from './utils/api';
 
 export default function Chat({ route, navigation }) {
   const { conversationId } = route.params;
@@ -48,18 +49,19 @@ export default function Chat({ route, navigation }) {
   const fetchMessages = async () => {
     try {
       const response = await axiosInstance.get(`chat/conversations/${conversationId}/messages/`);
-      setMessages(response.data);
+      const msgs = unwrapPagination(response.data);
+      setMessages(msgs);
 
       // Get other user from messages
-      if (response.data.length > 0 && currentUserId) {
-        const otherMessage = response.data.find(msg => msg.sender.id !== currentUserId);
+      if (msgs.length > 0 && currentUserId) {
+        const otherMessage = msgs.find(msg => msg.sender.id !== currentUserId);
         if (otherMessage) {
           setOtherUser(otherMessage.sender);
-        } else if (response.data[0]) {
-          setOtherUser(response.data[0].sender);
+        } else if (msgs[0]) {
+          setOtherUser(msgs[0].sender);
         }
-      } else if (response.data.length > 0 && !currentUserId) {
-        setOtherUser(response.data[0].sender);
+      } else if (msgs.length > 0 && !currentUserId) {
+        setOtherUser(msgs[0].sender);
       }
 
       // Fallback: fetch conversation details to get other participant
