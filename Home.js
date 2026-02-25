@@ -21,6 +21,7 @@ import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
 import XPToast from './components/XPToast';
+import EmptyState from './components/EmptyState';
 
 const getThemeColor = (indexOrKey) => {
   return getHabitColor(indexOrKey);
@@ -411,7 +412,9 @@ export default function Home({ navigation }) {
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderCalendarStrip()}
         <View style={styles.listContainer}>
-          <FlatList data={habits} keyExtractor={i => i.id.toString()} renderItem={renderHabitCard} scrollEnabled={false} />
+          <FlatList data={habits} keyExtractor={i => i.id.toString()} renderItem={renderHabitCard} scrollEnabled={false}
+            ListEmptyComponent={<EmptyState icon="leaf-outline" title="Henüz alışkanlık yok" message="Yeni bir alışkanlık eklemek için + butonuna bas" />}
+          />
         </View>
       </ScrollView>
 
