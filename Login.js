@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,14 @@ import {
   Pressable,
   Alert,
   ScrollView,
+  Animated,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { saveTokens } from './utils/auth';
 
@@ -19,27 +26,40 @@ export default function Login({ navigation }) {
   const [password2, setPassword2] = useState('');
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const logoScale = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+      Animated.spring(logoScale, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const handleLogin = async () => {
     if (loading) return;
     if (!username.trim() || !password.trim()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Hata!', 'Kullanıcı adı ve şifre gereklidir.');
       return;
     }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     try {
-      const response = await axiosInstance.post('users/api/login/', {
-        username,
-        password,
-      });
+      const response = await axiosInstance.post('users/api/login/', { username, password });
       const { access, refresh, user } = response.data;
       await saveTokens(access, refresh);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setLoading(false);
-      Alert.alert('Başarılı!', `Hoş geldiniz ${user.username}!`);
       navigation.replace('Main');
     } catch (error) {
       setLoading(false);
-      console.error('Login failed:', error.response?.data || error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const errorMsg = error.response?.data?.error || error.response?.data?.detail || 'Kullanıcı adı veya şifre yanlış.';
       Alert.alert('Hata!', errorMsg);
     }
@@ -48,30 +68,30 @@ export default function Login({ navigation }) {
   const handleRegister = async () => {
     if (loading) return;
     if (password !== password2) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Hata!', 'Şifreler eşleşmiyor.');
       return;
     }
     if (!username.trim() || !email.trim() || !password.trim()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Hata!', 'Tüm alanlar gereklidir.');
       return;
     }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     try {
       const response = await axiosInstance.post('users/api/register/', {
-        username,
-        email,
-        password,
-        password2,
+        username, email, password, password2,
         bio: bio || undefined,
       });
       const { access, refresh, user } = response.data;
       await saveTokens(access, refresh);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setLoading(false);
-      Alert.alert('Başarılı!', `Kayıt başarılı! Hoş geldiniz ${user.username}!`);
       navigation.replace('Main');
     } catch (error) {
       setLoading(false);
-      console.error('Register failed:', error.response?.data || error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const errorMsg = error.response?.data?.error ||
         Object.values(error.response?.data || {}).flat().join(', ') ||
         'Kayıt başarısız oldu.';
@@ -79,149 +99,239 @@ export default function Login({ navigation }) {
     }
   };
 
+  const toggleMode = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsRegister(!isRegister);
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>{isRegister ? 'Kayıt Ol' : 'Giriş Yap'}</Text>
+    <LinearGradient
+      colors={['#667eea', '#764ba2']}
+      style={styles.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {/* Logo / Brand */}
+          <Animated.View style={[styles.logoContainer, { transform: [{ scale: logoScale }] }]}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="leaf" size={40} color="#667eea" />
+            </View>
+            <Text style={styles.brandName}>HabitBud</Text>
+            <Text style={styles.tagline}>Alışkanlıklarını birlikte inşa et</Text>
+          </Animated.View>
 
-        <Text style={styles.label}>Kullanıcı Adı</Text>
-        <TextInput
-          placeholder="Kullanıcı adınızı girin"
-          style={styles.textInputStyle}
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-        />
+          {/* Form Card */}
+          <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Text style={styles.cardTitle}>{isRegister ? 'Kayıt Ol' : 'Giriş Yap'}</Text>
 
-        {isRegister && (
-          <>
-            <Text style={styles.label}>E-posta</Text>
-            <TextInput
-              placeholder="E-posta adresinizi girin"
-              style={styles.textInputStyle}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <Text style={styles.label}>Biyografi (Opsiyonel)</Text>
-            <TextInput
-              placeholder="Biyografinizi girin"
-              style={styles.textInputStyle}
-              value={bio}
-              onChangeText={setBio}
-              multiline
-            />
-          </>
-        )}
+            <View style={styles.inputContainer}>
+              <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
+              <TextInput
+                placeholder="Kullanıcı adı"
+                placeholderTextColor="#aaa"
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+              />
+            </View>
 
-        <Text style={styles.label}>Şifre</Text>
-        <TextInput
-          placeholder="Şifrenizi girin"
-          style={styles.textInputStyle}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+            {isRegister && (
+              <>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <TextInput
+                    placeholder="E-posta"
+                    placeholderTextColor="#aaa"
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
 
-        {isRegister && (
-          <>
-            <Text style={styles.label}>Şifre Tekrar</Text>
-            <TextInput
-              placeholder="Şifrenizi tekrar girin"
-              style={styles.textInputStyle}
-              secureTextEntry
-              value={password2}
-              onChangeText={setPassword2}
-            />
-          </>
-        )}
+                <View style={styles.inputContainer}>
+                  <Ionicons name="create-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <TextInput
+                    placeholder="Biyografi (opsiyonel)"
+                    placeholderTextColor="#aaa"
+                    style={styles.input}
+                    value={bio}
+                    onChangeText={setBio}
+                  />
+                </View>
+              </>
+            )}
 
-        <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={isRegister ? handleRegister : handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Yükleniyor...' : (isRegister ? 'Kayıt Ol' : 'Giriş Yap')}
-          </Text>
-        </Pressable>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+              <TextInput
+                placeholder="Şifre"
+                placeholderTextColor="#aaa"
+                style={[styles.input, { flex: 1 }]}
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#999" />
+              </Pressable>
+            </View>
 
-        <Pressable
-          style={styles.switchButton}
-          onPress={() => setIsRegister(!isRegister)}
-        >
-          <Text style={styles.switchText}>
-            {isRegister
-              ? 'Zaten hesabınız var mı? Giriş yapın'
-              : 'Hesabınız yok mu? Kayıt olun'}
-          </Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+            {isRegister && (
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Şifre tekrar"
+                  placeholderTextColor="#aaa"
+                  style={styles.input}
+                  secureTextEntry={!showPassword}
+                  value={password2}
+                  onChangeText={setPassword2}
+                />
+              </View>
+            )}
+
+            <Pressable
+              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+              onPress={isRegister ? handleRegister : handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitBtnText}>
+                  {isRegister ? 'Kayıt Ol' : 'Giriş Yap'}
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable style={styles.switchBtn} onPress={toggleMode}>
+              <Text style={styles.switchText}>
+                {isRegister
+                  ? 'Zaten hesabınız var mı? Giriş yapın'
+                  : 'Hesabınız yok mu? Kayıt olun'}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradient: {
     flex: 1,
-    backgroundColor: '#fff',
   },
-  content: {
-    flex: 1,
-    padding: 20,
-    alignItems: 'center',
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    minHeight: 600,
+    padding: 24,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 30,
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    marginBottom: 16,
+  },
+  brandName: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  tagline: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f6fa',
+    borderRadius: 14,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
     color: '#333',
   },
-  textInputStyle: {
-    borderWidth: 1,
-    width: '90%',
-    height: 50,
-    borderRadius: 10,
-    marginVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: '#f0f0f0',
-    borderColor: '#ccc',
-    color: 'black',
+  eyeIcon: {
+    padding: 4,
   },
-  label: {
-    fontSize: 16,
-    marginBottom: 5,
-    marginTop: 10,
-    width: '90%',
-    fontWeight: '500',
+  submitBtn: {
+    backgroundColor: '#667eea',
+    borderRadius: 14,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  button: {
-    backgroundColor: '#007BFF',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-    width: '90%',
+  submitBtnDisabled: {
+    backgroundColor: '#b0b8e8',
+    shadowOpacity: 0,
+  },
+  submitBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  switchBtn: {
+    marginTop: 18,
     alignItems: 'center',
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  switchButton: {
-    marginTop: 20,
-    padding: 10,
-  },
   switchText: {
-    color: '#007BFF',
+    color: '#667eea',
     fontSize: 14,
-    textDecorationLine: 'underline',
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-    opacity: 0.6,
+    fontWeight: '500',
   },
 });

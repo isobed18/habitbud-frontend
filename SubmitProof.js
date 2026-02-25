@@ -14,6 +14,7 @@ import {
   Dimensions, // Add Dimensions
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { Ionicons } from '@expo/vector-icons';
 import { getHabitColor } from './utils/colors'; // Reuse colors
@@ -65,6 +66,7 @@ export default function SubmitProof({ route, navigation }) {
   };
 
   const takePhoto = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('İzin Gerekli', 'Kamera izni gereklidir.');
@@ -86,6 +88,7 @@ export default function SubmitProof({ route, navigation }) {
     if (!selectedHabitId) { Alert.alert('Hata', 'Lütfen bir alışkanlık seçin.'); return; }
     if (!image) { Alert.alert('Hata', 'Fotoğraf çekmediniz.'); return; }
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
 
     try {

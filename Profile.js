@@ -13,6 +13,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { removeTokens } from './utils/auth';
 
@@ -121,28 +122,35 @@ const ProfilePage = ({ navigation }) => {
       const response = await axiosInstance.put('users/api/profile/', updateData);
       setProfile(response.data);
       setEditProfileVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Başarılı!', 'Profil güncellendi.');
     } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Hata!', 'Profil güncellenemedi.');
     }
   };
 
   const sendFriendRequest = async () => {
     if (!username.trim()) { Alert.alert('Hata!', 'Kullanıcı adı gereklidir.'); return; }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await axiosInstance.post('friends/request/', { username: username.trim() });
       setShowPopup(false);
       setUsername('');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Başarılı!', 'Arkadaşlık isteği gönderildi.');
       fetchFriendRequests();
     } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Hata!', 'İstek gönderilemedi.');
     }
   };
 
   const respondToRequest = async (requestId, action) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await axiosInstance.post(`friends/requests/${requestId}/respond/`, { action });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       fetchFriendRequests();
       fetchFriends();
     } catch (error) {
@@ -151,6 +159,7 @@ const ProfilePage = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const refreshToken = await require('./utils/auth').getRefreshToken();
       if (refreshToken) {

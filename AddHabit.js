@@ -9,6 +9,7 @@ import {
     Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
@@ -40,22 +41,26 @@ export default function AddHabit({ navigation }) {
 
     const handleSaveHabit = async () => {
         if (!habitForm.name.trim()) { Alert.alert('Hata', 'İsim gerekli'); return; }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
             const habitData = { ...habitForm, habit_type: habitType, color: habitForm.colorIndex };
             if (habitType === 'count') habitData.target_count = parseInt(habitForm.target_count);
             else habitData.target_time = typeof habitForm.target_time === 'string' ? habitForm.target_time : formatSecondsToTime(habitForm.target_time);
 
             await axiosInstance.post('habits/', habitData);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert('Başarılı', 'Alışkanlık oluşturuldu', [
                 { text: 'Tamam', onPress: () => navigation.goBack() }
             ]);
         } catch (error) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             console.error('Add Habit Error:', error.response?.data || error.message);
             Alert.alert('Hata', 'Ekleme başarısız: ' + (error.response?.data?.error || "bilinmiyor"));
         }
     };
 
     const addPreset = async (preset) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         try {
             const habitData = {
                 name: preset.name,

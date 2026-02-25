@@ -13,6 +13,7 @@ import {
     Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 
 const { width } = Dimensions.get('window');
@@ -115,6 +116,7 @@ export default function Challenges({ navigation }) {
             return;
         }
 
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
             const payload = {
                 habit_name: selectedTemplate.predefined_habit_name,
