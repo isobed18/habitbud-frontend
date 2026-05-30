@@ -14,8 +14,11 @@ export default function Avatar({ user, size = 48, style }) {
 
   const uploaded = user?.avatar ? getImageUrl(user.avatar) : null;
   const cfg = parseAvatarConfig(user?.avatar_config, username);
-  const generated = cfg ? buildAvatarUrl(cfg) : null;
-  const uri = uploaded || generated;
+  // For 3D avatars, show the lightweight 2D face snapshot (model_thumb) instead
+  // of loading the full GLB — fast everywhere (chat, lists, search).
+  const snapshot = cfg?.provider === '3d' && cfg.model_thumb ? getImageUrl(cfg.model_thumb) : null;
+  const generated = cfg && cfg.provider !== '3d' ? buildAvatarUrl(cfg) : null;
+  const uri = uploaded || snapshot || generated;
 
   if (uri) {
     return <Image source={{ uri }} style={[base, { backgroundColor: '#eef2ff' }, style]} />;

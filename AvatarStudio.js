@@ -39,6 +39,7 @@ export default function AvatarStudio({ navigation }) {
           label: `${a.emoji || ''} ${a.name}`.trim(),
           url: a.glb || a.glb_url,
           scale: a.scale || 1.0,
+          thumb: a.thumbnail || null,
         })).filter((m) => m.url));
       }
       if (ir.status === 'fulfilled' && Array.isArray(ir.value.data)) {
@@ -89,7 +90,7 @@ export default function AvatarStudio({ navigation }) {
     haptics.selection();
     if (mode === '3d') {
       const m = models3d[0] || SAMPLE_MODELS[0];
-      setConfig((c) => ({ ...c, provider: '3d', model_url: c.model_url || m.url, model_scale: c.model_scale || m.scale }));
+      setConfig((c) => ({ ...c, provider: '3d', model_url: c.model_url || m.url, model_scale: c.model_scale || m.scale, model_thumb: c.model_thumb || m.thumb }));
     } else {
       setConfig((c) => ({ ...c, provider: 'dicebear', style: c.style && c.style !== 'kitten' ? c.style : 'avataaars' }));
     }
@@ -97,7 +98,7 @@ export default function AvatarStudio({ navigation }) {
 
   const pick3dModel = (m) => {
     haptics.selection();
-    setConfig((c) => ({ ...c, provider: '3d', model_url: m.url, model_scale: m.scale }));
+    setConfig((c) => ({ ...c, provider: '3d', model_url: m.url, model_scale: m.scale, model_thumb: m.thumb }));
   };
 
   if (loading) {

@@ -1,13 +1,13 @@
-// Avatar3D — renders a rotating GLB model with react-three-fiber on expo-gl.
-// Isolated/optional: if 3D fails on a device, the 2D <Avatar/> still works.
+// Avatar3D — interactive (drag-to-rotate) GLB viewer on react-three-fiber +
+// expo-gl. Isolated/optional: if 3D fails, the 2D <Avatar/> still works.
 //
-// IMPORTANT lighting fix: Hunyuan3D GLBs export materials as metallic=1 with no
-// vertex normals. In a PBR renderer with no environment map that renders dark.
-// We force the materials to matte (metalness=0) — correct for plush toys — and
-// recompute normals so simple lights shade them brightly.
+// Perf: GLBs are cached to disk (expo-file-system) so they download once.
+// Lighting fix: Hunyuan GLBs are metallic=1 with no normals -> dark. We force
+// matte (metalness=0) + recompute normals so the plush colors read brightly.
 
-import React, { Suspense, useRef, useState, useMemo } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import React, { Suspense, useRef, useState, useMemo, useEffect } from 'react';
+import { View, ActivityIndicator, Text, StyleSheet, PanResponder } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import { getImageUrl } from '../services/axiosInstance';
 
 let Canvas, useFrame, useGLTF;
@@ -16,7 +16,31 @@ try {
   ({ useGLTF } = require('@react-three/drei/native'));
 } catch (_) { /* 3D libs unavailable */ }
 
-// Make a loaded scene look like a bright matte plush toy.
+// Download a remote GLB to the cache dir once; return a local file:// uri.
+function useCachedGlb(remoteUrl) {
+  const [uri, setUri] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const abs = getImageUrl(remoteUrl);
+    if (!abs) { setUri(null); return; }
+    if (abs.startsWith('file://') || !FileSystem.cacheDirectory) { setUri(abs); return; }
+    const safe = abs.split('?')[0].split('/').pop() || 'model.glb';
+    const local = FileSystem.cacheDirectory + 'glb_' + safe;
+    (async () => {
+      try {
+        const info = await FileSystem.getInfoAsync(local);
+        if (info.exists && info.size > 0) { if (alive) setUri(local); return; }
+        const res = await FileSystem.downloadAsync(abs, local);
+        if (alive) setUri(res.uri || abs);
+      } catch (_) {
+        if (alive) setUri(abs); // fall back to streaming
+      }
+    })();
+    return () => { alive = false; };
+  }, [remoteUrl]);
+  return uri;
+}
+
 function plushify(scene) {
   if (!scene) return scene;
   scene.traverse((child) => {
@@ -27,44 +51,41 @@ function plushify(scene) {
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach((m) => {
       if (!m) return;
-      if ('metalness' in m) m.metalness = 0;       // kill the dark metallic look
-      if ('roughness' in m) m.roughness = 0.85;    // soft matte
-      if ('envMapIntensity' in m) m.envMapIntensity = 1.0;
+      if ('metalness' in m) m.metalness = 0;
+      if ('roughness' in m) m.roughness = 0.85;
       m.needsUpdate = true;
     });
   });
   return scene;
 }
 
-function ItemModel({ url, scale }) {
-  const gltf = useGLTF(getImageUrl(url));
-  const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
-  return <primitive object={scene} scale={scale} />;
-}
-
-function Model({ url, scale, equippedItems = [] }) {
-  const gltf = useGLTF(getImageUrl(url));
+function Model({ localUri, scale, rot }) {
+  const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
   const ref = useRef();
-  useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * 0.6; });
-  return (
-    <group ref={ref}>
-      <primitive object={scene} scale={scale} />
-      {equippedItems.map((item, index) => {
-        const itemUrl = typeof item === 'string' ? item : (item?.glb || item?.glb_url || item?.model_url);
-        if (!itemUrl) return null;
-        return (
-          <Suspense key={`${itemUrl}-${index}`} fallback={null}>
-            <ItemModel url={itemUrl} scale={scale} />
-          </Suspense>
-        );
-      })}
-    </group>
-  );
+  useFrame(() => {
+    if (!ref.current) return;
+    // Follow the user's drag (no constant auto-spin).
+    ref.current.rotation.y = rot.current.y;
+    ref.current.rotation.x = rot.current.x;
+  });
+  return <primitive ref={ref} object={scene} scale={scale} />;
 }
 
-export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220 }) {
+export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
   const [failed, setFailed] = useState(false);
+  const localUri = useCachedGlb(url);
+  const rot = useRef({ y: 0, x: 0 });
+
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (_e, g) => {
+      rot.current.y += g.dx * 0.01;
+      // clamp vertical tilt so it can't flip upside down
+      rot.current.x = Math.max(-0.6, Math.min(0.6, rot.current.x + g.dy * 0.005));
+    },
+  }), []);
 
   if (!url || !Canvas || !useGLTF) {
     return (
@@ -80,11 +101,17 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
       </View>
     );
   }
+  if (!localUri) {
+    return (
+      <View style={[styles.fallback, { height }, style]}>
+        <ActivityIndicator color="#8b5cf6" />
+      </View>
+    );
+  }
 
   return (
-    <View style={[{ height }, style]}>
+    <View style={[{ height }, style]} {...pan.panHandlers}>
       <Canvas camera={{ position: [0, 1.2, 4.2], fov: 50 }}>
-        {/* Bright, even lighting so matte models read their true colors. */}
         <ambientLight intensity={1.1} />
         <hemisphereLight args={['#ffffff', '#b0b0b0', 1.1]} />
         <directionalLight position={[3, 5, 4]} intensity={1.4} />
@@ -92,7 +119,7 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
         <directionalLight position={[0, -3, 2]} intensity={0.4} />
         <Suspense fallback={null}>
           <ErrorGuard onError={() => setFailed(true)}>
-            <Model url={url} scale={scale} equippedItems={equippedItems} />
+            <Model localUri={localUri} scale={scale} rot={rot} />
           </ErrorGuard>
         </Suspense>
       </Canvas>
@@ -100,7 +127,6 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
   );
 }
 
-// Minimal error boundary so a bad model doesn't crash the whole tree.
 class ErrorGuard extends React.Component {
   componentDidCatch() { this.props.onError?.(); }
   render() { return this.props.children; }
