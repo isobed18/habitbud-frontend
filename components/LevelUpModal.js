@@ -80,6 +80,16 @@ export default function LevelUpModal({ visible, level, onClose }) {
 
     const confettiColors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff', '#5f27cd', '#01e066', '#ff9f43'];
 
+    const MASCOT_LINES = [
+        'Harikasın! Bu ivmeyi koru 🔥',
+        'Her check seni daha güçlü yapıyor 💪',
+        'Arkadaşların seninle gurur duyuyor! 🌟',
+        'Disiplin = özgürlük. Devam et! 🚀',
+        'Streak\'ini kırma, sen yaparsın! ✨',
+    ];
+    const mascotLine = MASCOT_LINES[(level || 1) % MASCOT_LINES.length];
+    const nextLevelXp = 50 * Math.pow((level || 1), 2);
+
     if (!visible) return null;
 
     return (
@@ -113,9 +123,26 @@ export default function LevelUpModal({ visible, level, onClose }) {
 
                     <Text style={styles.title}>Seviye Atladın! 🎉</Text>
                     <Text style={styles.subtitle}>Tebrikler! Seviye {level}'e ulaştın</Text>
-                    <Text style={styles.description}>
-                        Yeni özellikler ve ödüller açıldı. Devam et! 💪
-                    </Text>
+
+                    {/* Mascot + speech bubble */}
+                    <View style={styles.mascotRow}>
+                        <Text style={styles.mascot}>🦊</Text>
+                        <View style={styles.bubble}>
+                            <Text style={styles.bubbleText}>{mascotLine}</Text>
+                        </View>
+                    </View>
+
+                    {/* Stats */}
+                    <View style={styles.statsRow}>
+                        <View style={styles.statBox}>
+                            <Text style={styles.statVal}>{level}</Text>
+                            <Text style={styles.statLbl}>Seviye</Text>
+                        </View>
+                        <View style={styles.statBox}>
+                            <Text style={styles.statVal}>{nextLevelXp}</Text>
+                            <Text style={styles.statLbl}>Sonraki için XP</Text>
+                        </View>
+                    </View>
 
                     <Pressable
                         style={styles.continueBtn}
@@ -155,6 +182,14 @@ const styles = StyleSheet.create({
         top: '50%',
         left: '50%',
     },
+    mascotRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 16, paddingHorizontal: 4 },
+    mascot: { fontSize: 44, marginRight: 8 },
+    bubble: { flex: 1, backgroundColor: '#23233e', borderRadius: 16, borderTopLeftRadius: 4, padding: 12 },
+    bubbleText: { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
+    statsRow: { flexDirection: 'row', gap: 12, marginTop: 18, marginBottom: 6 },
+    statBox: { flex: 1, backgroundColor: '#23233e', borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
+    statVal: { color: '#fff', fontSize: 22, fontWeight: '900' },
+    statLbl: { color: '#94a3b8', fontSize: 11, marginTop: 2 },
     glow: {
         position: 'absolute',
         width: 150,

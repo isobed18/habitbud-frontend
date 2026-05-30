@@ -16,6 +16,7 @@ import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { unwrapPagination } from './utils/api';
 import { reward, haptics } from './utils/feedback';
+import LevelUpModal from './components/LevelUpModal';
 
 export default function Chat({ route, navigation }) {
   const { conversationId } = route.params;
@@ -28,6 +29,7 @@ export default function Chat({ route, navigation }) {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [conversation, setConversation] = useState(null);
   const [membersVisible, setMembersVisible] = useState(false);
+  const [levelUp, setLevelUp] = useState(null);
   const [wsEnabled, setWsEnabled] = useState(true);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const flatListRef = useRef(null);
@@ -157,6 +159,12 @@ export default function Chat({ route, navigation }) {
             } else {
               setIsTyping(false);
               setTypingUser(null);
+            }
+          } else if (data.type === 'system_notification' && data.notification_type === 'level_up') {
+            const newLevel = data.data?.new_level;
+            if (newLevel) {
+              setLevelUp(newLevel);
+              reward(0, { big: true }); // confetti + celebrate haptic
             }
           }
         } catch (error) {
@@ -495,6 +503,7 @@ export default function Chat({ route, navigation }) {
           </View>
         </View>
       </Modal>
+      <LevelUpModal visible={!!levelUp} level={levelUp} onClose={() => setLevelUp(null)} />
     </KeyboardAvoidingView>
   );
 }

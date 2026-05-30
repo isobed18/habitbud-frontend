@@ -7,12 +7,14 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
 import { rewardBus } from '../utils/feedback';
+import Celebration from './Celebration';
 
 let _id = 0;
 
 export default function RewardOverlay() {
   const [chips, setChips] = useState([]);
   const [total, setTotal] = useState(0);
+  const [burst, setBurst] = useState(0);
 
   const badgeScale = useRef(new Animated.Value(0)).current;   // 0 = hidden
   const badgeOpacity = useRef(new Animated.Value(0)).current;
@@ -53,6 +55,7 @@ export default function RewardOverlay() {
         scale: new Animated.Value(0.6),
       };
       setChips((prev) => [...prev, chip]);
+      if (event.big) setBurst((b) => b + 1);
 
       Animated.sequence([
         Animated.parallel([
@@ -76,6 +79,7 @@ export default function RewardOverlay() {
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Celebration play={burst} />
       {/* Flying chips, stacked above the badge */}
       <View style={styles.chipZone} pointerEvents="none">
         {chips.map((c) => (
