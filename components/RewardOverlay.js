@@ -1,8 +1,8 @@
 // Global reward overlay — mounted once in App.js, sits above everything.
 //
-// Subscribes to rewardBus. Each reward spawns a blue "+N XP" chip that floats
-// up into a running total badge at the bottom-right, which pulses as it grows.
-// The badge fades out after a few idle seconds.
+// Subscribes to rewardBus. XP rewards fly into an amber ⚡ total; diamond
+// rewards fly into a separate cyan 💎 total (diamonds are premium, rarer).
+// Big events also fire a confetti burst. Totals fade out after a few idle secs.
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
@@ -13,10 +13,11 @@ let _id = 0;
 
 export default function RewardOverlay() {
   const [chips, setChips] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [gemTotal, setGemTotal] = useState(0);
   const [burst, setBurst] = useState(0);
 
-  const badgeScale = useRef(new Animated.Value(0)).current;   // 0 = hidden
+  const badgeScale = useRef(new Animated.Value(0)).current;
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
   const hideTimer = useRef(null);
@@ -27,17 +28,15 @@ export default function RewardOverlay() {
       Animated.spring(badgeScale, { toValue: 1, friction: 6, useNativeDriver: true }),
       Animated.timing(badgeOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
-    // pulse
     Animated.sequence([
       Animated.timing(pulse, { toValue: 1.25, duration: 120, useNativeDriver: true }),
       Animated.spring(pulse, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
-    // auto-hide after idle
     hideTimer.current = setTimeout(() => {
       Animated.parallel([
         Animated.timing(badgeOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
         Animated.timing(badgeScale, { toValue: 0.6, duration: 400, useNativeDriver: true }),
-      ]).start(() => setTotal(0));
+      ]).start(() => { setXpTotal(0); setGemTotal(0); });
     }, 3500);
   }, [badgeScale, badgeOpacity, pulse]);
 
@@ -45,18 +44,13 @@ export default function RewardOverlay() {
     const unsub = rewardBus.subscribe((event) => {
       const xp = event.xp || 0;
       const diamonds = event.diamonds || 0;
-      // A "big" event always celebrates with confetti.
-      if (event.big && (xp > 0 || diamonds > 0)) setBurst((b) => b + 1);
-      // Show chip if either XP or diamonds are earned.
+      if (event.big) setBurst((b) => b + 1);
       if (xp <= 0 && diamonds <= 0) return;
 
       const id = ++_id;
       const chip = {
-        id,
-        xp,
-        diamonds,
-        label: event.label,
-        big: event.big,
+        id, xp, diamonds, label: event.label, big: event.big,
+        gem: diamonds > 0 && xp <= 0,  // pure-diamond chip styling
         translateY: new Animated.Value(0),
         opacity: new Animated.Value(0),
         scale: new Animated.Value(0.6),
@@ -69,13 +63,13 @@ export default function RewardOverlay() {
           Animated.spring(chip.scale, { toValue: 1, friction: 5, useNativeDriver: true }),
         ]),
         Animated.delay(event.big ? 650 : 350),
-        // fly down into the badge
         Animated.parallel([
           Animated.timing(chip.translateY, { toValue: 70, duration: 380, easing: Easing.in(Easing.quad), useNativeDriver: true }),
           Animated.timing(chip.opacity, { toValue: 0, duration: 380, useNativeDriver: true }),
         ]),
       ]).start(() => {
-        if (xp > 0) setTotal((t) => t + xp);
+        if (xp > 0) setXpTotal((t) => t + xp);
+        if (diamonds > 0) setGemTotal((t) => t + diamonds);
         showBadge();
         setChips((prev) => prev.filter((c) => c.id !== id));
       });
@@ -83,61 +77,64 @@ export default function RewardOverlay() {
     return unsub;
   }, [showBadge]);
 
-  const getChipText = (c) => {
+  const chipText = (c) => {
     const parts = [];
     if (c.xp > 0) parts.push(`+${c.xp} XP`);
     if (c.diamonds > 0) parts.push(`+${c.diamonds} 💎`);
     if (c.label) parts.push(c.label);
-    return parts.join(' · ');
+    return parts.join('  ');
   };
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Celebration play={burst} lottieSource={require('../assets/lottie/confetti.json')} />
-      {/* Flying chips, stacked above the badge */}
+
       <View style={styles.chipZone} pointerEvents="none">
         {chips.map((c) => (
           <Animated.View
             key={c.id}
             style={[
               styles.chip,
-              c.big && styles.chipBig,
+              c.gem ? styles.chipGem : (c.big ? styles.chipBig : styles.chipXp),
               { opacity: c.opacity, transform: [{ translateY: c.translateY }, { scale: c.scale }] },
             ]}
           >
-            <Text style={styles.chipText}>{getChipText(c)}</Text>
+            <Text style={styles.chipText}>{chipText(c)}</Text>
           </Animated.View>
         ))}
       </View>
 
-      {/* Running total badge */}
-      <Animated.View
-        style={[
-          styles.badge,
-          { opacity: badgeOpacity, transform: [{ scale: Animated.multiply(badgeScale, pulse) }] },
-        ]}
-      >
-        <Text style={styles.badgeBolt}>⚡</Text>
-        <Text style={styles.badgeText}>+{total} XP</Text>
+      {/* Running totals (XP amber, Diamonds cyan) */}
+      <Animated.View style={[styles.badgeCol, { opacity: badgeOpacity, transform: [{ scale: Animated.multiply(badgeScale, pulse) }] }]}>
+        {gemTotal > 0 && (
+          <View style={[styles.badge, styles.badgeGem]}>
+            <Text style={styles.badgeIcon}>💎</Text>
+            <Text style={styles.badgeText}>+{gemTotal}</Text>
+          </View>
+        )}
+        {xpTotal > 0 && (
+          <View style={[styles.badge, styles.badgeXp]}>
+            <Text style={styles.badgeIcon}>⚡</Text>
+            <Text style={styles.badgeText}>+{xpTotal} XP</Text>
+          </View>
+        )}
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  chipZone: { position: 'absolute', right: 20, bottom: 120, alignItems: 'flex-end' },
-  chip: {
-    backgroundColor: 'rgba(59,130,246,0.96)',
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, marginBottom: 6,
-    shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8,
-  },
-  chipBig: { backgroundColor: 'rgba(245,158,11,0.97)' },
+  chipZone: { position: 'absolute', right: 20, bottom: 130, alignItems: 'flex-end' },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, marginBottom: 6, elevation: 8 },
+  chipXp: { backgroundColor: 'rgba(59,130,246,0.96)', shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 8 },
+  chipBig: { backgroundColor: 'rgba(245,158,11,0.97)', shadowColor: '#f59e0b', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 8 },
+  chipGem: { backgroundColor: 'rgba(6,182,212,0.97)', shadowColor: '#06b6d4', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.6, shadowRadius: 10 },
   chipText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  badge: {
-    position: 'absolute', right: 20, bottom: 95, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1e3a8a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24,
-    shadowColor: '#1e3a8a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 12,
-  },
-  badgeBolt: { fontSize: 18, marginRight: 6 },
+
+  badgeCol: { position: 'absolute', right: 20, bottom: 95, alignItems: 'flex-end', gap: 8 },
+  badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, elevation: 12 },
+  badgeXp: { backgroundColor: '#1e3a8a', shadowColor: '#1e3a8a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10 },
+  badgeGem: { backgroundColor: '#0e7490', shadowColor: '#06b6d4', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 10 },
+  badgeIcon: { fontSize: 18, marginRight: 6 },
   badgeText: { color: '#fff', fontWeight: '900', fontSize: 18, letterSpacing: 0.5 },
 });

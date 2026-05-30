@@ -164,10 +164,11 @@ export default function Chat({ route, navigation }) {
               setTypingUser(null);
             }
           } else if (data.type === 'system_notification' && data.notification_type === 'level_up') {
-            const newLevel = data.data?.new_level;
-            if (newLevel) {
-              setLevelUp(newLevel);
-              reward(0, { big: true }); // confetti + celebrate haptic
+            const d = data.data || {};
+            if (d.new_level) {
+              setLevelUp(d.new_level);
+              // Level-up celebration + the diamonds it awarded fly into the 💎 total.
+              reward(0, { big: true, diamonds: d.diamond_bonus || 0 });
             }
           }
         } catch (error) {

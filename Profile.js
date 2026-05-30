@@ -264,16 +264,19 @@ const ProfilePage = ({ navigation }) => {
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
+              <Ionicons name="star" size={18} color="#8b5cf6" />
               <Text style={styles.statValue}>{profile.level || 1}</Text>
-              <Text style={styles.statLabel}>Level</Text>
+              <Text style={styles.statLabel}>Seviye</Text>
             </View>
             <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#eee' }]}>
-              <Text style={styles.statValue}>{profile.xp || 0}</Text>
+              <Ionicons name="flash" size={18} color="#f59e0b" />
+              <Text style={[styles.statValue, { color: '#d97706' }]}>{profile.xp || 0}</Text>
               <Text style={styles.statLabel}>XP</Text>
             </View>
             <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#eee' }]}>
-              <Text style={styles.statValue}>{profile.points || 0}</Text>
-              <Text style={styles.statLabel}>Puan</Text>
+              <Ionicons name="diamond" size={18} color="#06b6d4" />
+              <Text style={[styles.statValue, { color: '#0891b2' }]}>{profile.points || 0}</Text>
+              <Text style={styles.statLabel}>Elmas</Text>
             </View>
           </View>
 
