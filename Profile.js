@@ -19,6 +19,8 @@ import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import Avatar from './components/Avatar';
+import Avatar3D from './components/Avatar3D';
+import { parseAvatarConfig } from './utils/avatar';
 
 const { width } = Dimensions.get('window');
 
@@ -245,7 +247,13 @@ const ProfilePage = ({ navigation }) => {
       {profile && (
         <View style={styles.profileCard}>
           <Pressable onPress={() => navigation.navigate('AvatarStudio')} style={{ marginBottom: 10 }}>
-            <Avatar user={profile} size={84} />
+            {(() => {
+              const cfg = parseAvatarConfig(profile.avatar_config, profile.username);
+              if (cfg?.provider === '3d' && cfg.model_url) {
+                return <Avatar3D url={cfg.model_url} scale={cfg.model_scale || 0.045} height={130} style={{ width: 130, borderRadius: 16, backgroundColor: '#eef2ff' }} />;
+              }
+              return <Avatar user={profile} size={84} />;
+            })()}
             <View style={styles.avatarEditBadge}>
               <Ionicons name="brush" size={14} color="#fff" />
             </View>

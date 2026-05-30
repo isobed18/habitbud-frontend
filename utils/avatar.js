@@ -39,6 +39,13 @@ export const DRESS_ITEMS = [
   { slug: 'beard', label: 'Sakal', emoji: '🧔', key: 'facialHair', value: 'beardMedium' },
 ];
 
+// Sample 3D base models (royalty-free Khronos glTF sample assets). Replace these
+// with your own Hunyuan3D-generated GLBs (served from backend media or any URL).
+export const SAMPLE_MODELS = [
+  { label: 'Tilki 🦊', url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb', scale: 0.045 },
+  { label: 'Ördek 🦆', url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb', scale: 1.4 },
+];
+
 export const randomSeed = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
 

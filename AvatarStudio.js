@@ -6,22 +6,39 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axiosInstance from './services/axiosInstance';
 import { haptics, reward } from './utils/feedback';
+import Avatar3D from './components/Avatar3D';
 import {
-  AVATAR_STYLES, DRESS_ITEMS, buildAvatarUrl, parseAvatarConfig, defaultAvatarConfig, randomSeed,
+  AVATAR_STYLES, DRESS_ITEMS, SAMPLE_MODELS, buildAvatarUrl, parseAvatarConfig, defaultAvatarConfig, randomSeed,
 } from './utils/avatar';
 
 export default function AvatarStudio({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState(defaultAvatarConfig());
+  const [models3d, setModels3d] = useState(SAMPLE_MODELS);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
-      const r = await axiosInstance.get('users/api/profile/');
-      const cfg = parseAvatarConfig(r.data.avatar_config, r.data.username) || defaultAvatarConfig(r.data.username);
-      setConfig(cfg);
+      const [pr, mr] = await Promise.allSettled([
+        axiosInstance.get('users/api/profile/'),
+        axiosInstance.get('users/api/avatar-models/'),
+      ]);
+      if (pr.status === 'fulfilled') {
+        const cfg = parseAvatarConfig(pr.value.data.avatar_config, pr.value.data.username) || defaultAvatarConfig(pr.value.data.username);
+        setConfig(cfg);
+      } else {
+        setConfig(defaultAvatarConfig());
+      }
+      if (mr.status === 'fulfilled' && Array.isArray(mr.value.data) && mr.value.data.length) {
+        // Backend (Hunyuan-generated) models take priority over samples.
+        setModels3d(mr.value.data.map((a) => ({
+          label: `${a.emoji || ''} ${a.name}`.trim(),
+          url: a.glb || a.glb_url,
+          scale: a.scale || 1.0,
+        })).filter((m) => m.url));
+      }
     } catch (_) {
       setConfig(defaultAvatarConfig());
     } finally { setLoading(false); }
@@ -54,8 +71,24 @@ export default function AvatarStudio({ navigation }) {
     } finally { setSaving(false); }
   };
 
-  const dressable = config.style === 'avataaars';
+  const is3d = config.provider === '3d';
+  const dressable = !is3d && config.style === 'avataaars';
   const previewUri = buildAvatarUrl(config);
+
+  const setMode = (mode) => {
+    haptics.selection();
+    if (mode === '3d') {
+      const m = models3d[0] || SAMPLE_MODELS[0];
+      setConfig((c) => ({ ...c, provider: '3d', model_url: c.model_url || m.url, model_scale: c.model_scale || m.scale }));
+    } else {
+      setConfig((c) => ({ ...c, provider: 'dicebear', style: c.style && c.style !== 'kitten' ? c.style : 'avataaars' }));
+    }
+  };
+
+  const pick3dModel = (m) => {
+    haptics.selection();
+    setConfig((c) => ({ ...c, provider: '3d', model_url: m.url, model_scale: m.scale }));
+  };
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8b5cf6" /></View>;
@@ -72,21 +105,58 @@ export default function AvatarStudio({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        {/* Preview */}
-        <View style={styles.previewBox}>
-          {previewUri ? (
-            <Image source={{ uri: previewUri }} style={styles.preview} />
-          ) : (
-            <ActivityIndicator color="#8b5cf6" />
-          )}
-          <Pressable style={styles.randomBtn} onPress={randomize}>
-            <Ionicons name="dice" size={18} color="#fff" />
-            <Text style={styles.randomText}>Karıştır</Text>
+        {/* 2D / 3D mode toggle */}
+        <View style={styles.modeTabs}>
+          <Pressable style={[styles.modeTab, !is3d && styles.modeTabActive]} onPress={() => setMode('2d')}>
+            <Text style={[styles.modeTabText, !is3d && styles.modeTabTextActive]}>2B</Text>
+          </Pressable>
+          <Pressable style={[styles.modeTab, is3d && styles.modeTabActive]} onPress={() => setMode('3d')}>
+            <Text style={[styles.modeTabText, is3d && styles.modeTabTextActive]}>3B</Text>
           </Pressable>
         </View>
 
-        {/* Style */}
-        <Text style={styles.section}>Karakter</Text>
+        {/* Preview */}
+        {is3d ? (
+          <View style={styles.previewBox}>
+            <Avatar3D url={config.model_url} scale={config.model_scale || 0.045} height={240} style={{ width: '100%', borderRadius: 16, backgroundColor: '#eef2ff' }} />
+          </View>
+        ) : (
+          <View style={styles.previewBox}>
+            {previewUri ? (
+              <Image source={{ uri: previewUri }} style={styles.preview} />
+            ) : (
+              <ActivityIndicator color="#8b5cf6" />
+            )}
+            <Pressable style={styles.randomBtn} onPress={randomize}>
+              <Ionicons name="dice" size={18} color="#fff" />
+              <Text style={styles.randomText}>Karıştır</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {is3d && (
+          <>
+            <Text style={styles.section}>3B Model</Text>
+            <View style={styles.chipWrap}>
+              {models3d.map((m) => {
+                const active = config.model_url === m.url;
+                return (
+                  <Pressable key={m.url} style={[styles.chip, active && styles.chipActive]} onPress={() => pick3dModel(m)}>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>
+              Bunlar örnek modeller. Hunyuan3D ile ürettiğin GLB'leri backend media'ya
+              koyup buraya ekleyince kendi karakterlerin görünür.
+            </Text>
+          </>
+        )}
+
+        {/* Style (2D) */}
+        {!is3d && <Text style={styles.section}>Karakter</Text>}
+        {!is3d && (
         <View style={styles.chipWrap}>
           {AVATAR_STYLES.map((s) => {
             const active = config.style === s.key;
@@ -97,10 +167,11 @@ export default function AvatarStudio({ navigation }) {
             );
           })}
         </View>
+        )}
 
         {/* Dress-up */}
-        <Text style={styles.section}>Kıyafet & Aksesuar</Text>
-        {dressable ? (
+        {!is3d && <Text style={styles.section}>Kıyafet & Aksesuar</Text>}
+        {!is3d && (dressable ? (
           <View style={styles.chipWrap}>
             {DRESS_ITEMS.map((it) => {
               const active = (config.items || []).includes(it.slug);
@@ -114,7 +185,7 @@ export default function AvatarStudio({ navigation }) {
           </View>
         ) : (
           <Text style={styles.hint}>Kıyafet/aksesuar yalnızca "Karakter" stilinde takılır.</Text>
-        )}
+        ))}
 
         <Pressable style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Kaydet</Text>}
@@ -130,6 +201,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
 
+  modeTabs: { flexDirection: 'row', backgroundColor: '#f1f1f4', borderRadius: 12, padding: 4, marginBottom: 16, alignSelf: 'center' },
+  modeTab: { paddingHorizontal: 28, paddingVertical: 8, borderRadius: 9 },
+  modeTabActive: { backgroundColor: '#8b5cf6' },
+  modeTabText: { fontWeight: '800', color: '#666' },
+  modeTabTextActive: { color: '#fff' },
   previewBox: { alignItems: 'center', marginBottom: 16 },
   preview: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#eef2ff' },
   randomBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#8b5cf6', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, marginTop: 14 },
