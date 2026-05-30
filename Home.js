@@ -372,7 +372,7 @@ export default function Home({ navigation }) {
                     console.log('Current streak before refresh:', item.streak);
 
                     if (newCount >= item.target_count) {
-                      reward(5, { label: 'Tamamlandı', big: true });
+                      reward(5, { label: 'Tamamlandı', big: true, flash: 'success' });
                       Alert.alert('Tebrikler! 🎉', 'Hedefine ulaştın! Şimdi check gönder, arkadaşların onaylasın 🔥', [
                         { text: 'Sonra', style: 'cancel' },
                         { text: 'Check Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) },

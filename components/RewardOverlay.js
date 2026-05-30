@@ -9,6 +9,13 @@ import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
 import { rewardBus } from '../utils/feedback';
 import Celebration from './Celebration';
 
+let LottieView = null;
+try { LottieView = require('lottie-react-native').default; } catch (_) {}
+const FLASH_SRC = {
+  success: require('../assets/lottie/success.json'),
+  fire: require('../assets/lottie/fire.json'),
+};
+
 let _id = 0;
 
 export default function RewardOverlay() {
@@ -16,6 +23,8 @@ export default function RewardOverlay() {
   const [xpTotal, setXpTotal] = useState(0);
   const [gemTotal, setGemTotal] = useState(0);
   const [burst, setBurst] = useState(0);
+  const [flash, setFlash] = useState(null); // { key, type }
+  const flashTimer = useRef(null);
 
   const badgeScale = useRef(new Animated.Value(0)).current;
   const badgeOpacity = useRef(new Animated.Value(0)).current;
@@ -45,6 +54,11 @@ export default function RewardOverlay() {
       const xp = event.xp || 0;
       const diamonds = event.diamonds || 0;
       if (event.big) setBurst((b) => b + 1);
+      if (event.flash && FLASH_SRC[event.flash] && LottieView) {
+        setFlash({ key: ++_id, type: event.flash });
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setFlash(null), 1500);
+      }
       if (xp <= 0 && diamonds <= 0) return;
 
       const id = ++_id;
@@ -89,6 +103,12 @@ export default function RewardOverlay() {
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Celebration play={burst} lottieSource={require('../assets/lottie/confetti.json')} />
 
+      {flash && LottieView && (
+        <View pointerEvents="none" style={styles.flashWrap}>
+          <LottieView key={flash.key} source={FLASH_SRC[flash.type]} autoPlay loop={false} style={styles.flash} />
+        </View>
+      )}
+
       <View style={styles.chipZone} pointerEvents="none">
         {chips.map((c) => (
           <Animated.View
@@ -124,6 +144,8 @@ export default function RewardOverlay() {
 }
 
 const styles = StyleSheet.create({
+  flashWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  flash: { width: 220, height: 220 },
   chipZone: { position: 'absolute', right: 20, bottom: 130, alignItems: 'flex-end' },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, marginBottom: 6, elevation: 8 },
   chipXp: { backgroundColor: 'rgba(59,130,246,0.96)', shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 8 },

@@ -58,11 +58,12 @@ export const rewardBus = {
 export function reward(xp, opts = {}) {
   if (opts.big) haptics.celebrate();
   else haptics.success();
-  rewardBus.emit({ 
-    xp: xp || 0, 
-    diamonds: opts.diamonds || 0, 
-    type: opts.type || 'xp', 
-    label: opts.label, 
-    big: !!opts.big 
+  rewardBus.emit({
+    xp: xp || 0,
+    diamonds: opts.diamonds || 0,
+    type: opts.type || 'xp',
+    label: opts.label,
+    big: !!opts.big,
+    flash: opts.flash || null,   // 'success' | 'fire' -> centered Lottie burst
   });
 }
