@@ -1,9 +1,8 @@
-// Avatar3D — interactive (drag-to-rotate) GLB viewer on react-three-fiber +
-// expo-gl. Isolated/optional: if 3D fails, the 2D <Avatar/> still works.
+// Avatar3D — smooth, inertial drag-to-rotate GLB viewer (react-three-fiber +
+// expo-gl). Isolated/optional: if 3D fails, the 2D <Avatar/> still works.
 //
-// Perf: GLBs are cached to disk (expo-file-system) so they download once.
-// Lighting fix: Hunyuan GLBs are metallic=1 with no normals -> dark. We force
-// matte (metalness=0) + recompute normals so the plush colors read brightly.
+// Perf: GLBs cached to disk (download once). Lighting: Hunyuan GLBs are
+// metallic=1 with no normals -> dark; forced matte + recomputed normals here.
 
 import React, { Suspense, useRef, useState, useMemo, useEffect } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet, PanResponder } from 'react-native';
@@ -16,7 +15,6 @@ try {
   ({ useGLTF } = require('@react-three/drei/native'));
 } catch (_) { /* 3D libs unavailable */ }
 
-// Download a remote GLB to the cache dir once; return a local file:// uri.
 function useCachedGlb(remoteUrl) {
   const [uri, setUri] = useState(null);
   useEffect(() => {
@@ -32,9 +30,7 @@ function useCachedGlb(remoteUrl) {
         if (info.exists && info.size > 0) { if (alive) setUri(local); return; }
         const res = await FileSystem.downloadAsync(abs, local);
         if (alive) setUri(res.uri || abs);
-      } catch (_) {
-        if (alive) setUri(abs); // fall back to streaming
-      }
+      } catch (_) { if (alive) setUri(abs); }
     })();
     return () => { alive = false; };
   }, [remoteUrl]);
@@ -63,11 +59,21 @@ function Model({ localUri, scale, rot }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
   const ref = useRef();
+  const cur = useRef({ y: 0, x: 0 });
   useFrame(() => {
     if (!ref.current) return;
-    // Follow the user's drag (no constant auto-spin).
-    ref.current.rotation.y = rot.current.y;
-    ref.current.rotation.x = rot.current.x;
+    const r = rot.current;
+    // Momentum when not actively dragging.
+    if (!r.dragging) {
+      r.y += r.vy;
+      r.vy *= 0.94;
+      if (Math.abs(r.vy) < 0.0004) r.vy = 0;
+    }
+    // Smoothly ease the rendered rotation toward the target.
+    cur.current.y += (r.y - cur.current.y) * 0.18;
+    cur.current.x += (r.x - cur.current.x) * 0.18;
+    ref.current.rotation.y = cur.current.y;
+    ref.current.rotation.x = cur.current.x;
   });
   return <primitive ref={ref} object={scene} scale={scale} />;
 }
@@ -75,38 +81,34 @@ function Model({ localUri, scale, rot }) {
 export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
   const [failed, setFailed] = useState(false);
   const localUri = useCachedGlb(url);
-  const rot = useRef({ y: 0, x: 0 });
+  // y/x = target rotation, vy = inertia, lastDx = per-move delta tracker.
+  const rot = useRef({ y: 0, x: 0, vy: 0, lastDx: 0, dragging: false });
 
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { rot.current.dragging = true; rot.current.vy = 0; rot.current.lastDx = 0; },
     onPanResponderMove: (_e, g) => {
-      rot.current.y += g.dx * 0.01;
-      // clamp vertical tilt so it can't flip upside down
-      rot.current.x = Math.max(-0.6, Math.min(0.6, rot.current.x + g.dy * 0.005));
+      const dy = g.dx - rot.current.lastDx;     // per-move horizontal delta
+      rot.current.lastDx = g.dx;
+      rot.current.y += dy * 0.007;               // lower sensitivity = calmer
+      rot.current.x = Math.max(-0.5, Math.min(0.5, rot.current.x + (g.vy || 0) * 0.02));
     },
+    onPanResponderRelease: (_e, g) => {
+      rot.current.dragging = false;
+      rot.current.vy = Math.max(-0.25, Math.min(0.25, (g.vx || 0) * 0.12)); // fling inertia
+    },
+    onPanResponderTerminate: () => { rot.current.dragging = false; },
   }), []);
 
   if (!url || !Canvas || !useGLTF) {
-    return (
-      <View style={[styles.fallback, { height }, style]}>
-        <Text style={styles.fallbackText}>3B önizleme kullanılamıyor</Text>
-      </View>
-    );
+    return <View style={[styles.fallback, { height }, style]}><Text style={styles.fallbackText}>3B kullanılamıyor</Text></View>;
   }
   if (failed) {
-    return (
-      <View style={[styles.fallback, { height }, style]}>
-        <Text style={styles.fallbackText}>Model yüklenemedi</Text>
-      </View>
-    );
+    return <View style={[styles.fallback, { height }, style]}><Text style={styles.fallbackText}>Model yüklenemedi</Text></View>;
   }
   if (!localUri) {
-    return (
-      <View style={[styles.fallback, { height }, style]}>
-        <ActivityIndicator color="#8b5cf6" />
-      </View>
-    );
+    return <View style={[styles.fallback, { height }, style]}><ActivityIndicator color="#8b5cf6" /></View>;
   }
 
   return (

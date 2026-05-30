@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Image, ActivityIndicator, Alert,
+  View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { haptics, reward } from './utils/feedback';
 import Avatar3D from './components/Avatar3D';
-import {
-  AVATAR_STYLES, DRESS_ITEMS, SAMPLE_MODELS, buildAvatarUrl, parseAvatarConfig, defaultAvatarConfig, randomSeed,
-} from './utils/avatar';
+import Avatar3DModal from './components/Avatar3DModal';
+import { SAMPLE_MODELS, parseAvatarConfig, defaultAvatarConfig } from './utils/avatar';
 
 export default function AvatarStudio({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -17,6 +16,7 @@ export default function AvatarStudio({ navigation }) {
   const [config, setConfig] = useState(defaultAvatarConfig());
   const [models3d, setModels3d] = useState(SAMPLE_MODELS);
   const [inventory, setInventory] = useState([]);
+  const [viewer, setViewer] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -27,41 +27,41 @@ export default function AvatarStudio({ navigation }) {
         axiosInstance.get('users/api/avatar-models/'),
         axiosInstance.get('items/'),
       ]);
-      if (pr.status === 'fulfilled') {
-        const cfg = parseAvatarConfig(pr.value.data.avatar_config, pr.value.data.username) || defaultAvatarConfig(pr.value.data.username);
-        setConfig(cfg);
-      } else {
-        setConfig(defaultAvatarConfig());
-      }
+
+      let models = SAMPLE_MODELS;
       if (mr.status === 'fulfilled' && Array.isArray(mr.value.data) && mr.value.data.length) {
-        // Backend (Hunyuan-generated) models take priority over samples.
-        setModels3d(mr.value.data.map((a) => ({
+        models = mr.value.data.map((a) => ({
           label: `${a.emoji || ''} ${a.name}`.trim(),
           url: a.glb || a.glb_url,
           scale: a.scale || 1.0,
           thumb: a.thumbnail || null,
-        })).filter((m) => m.url));
+        })).filter((m) => m.url);
+        setModels3d(models);
       }
-      if (ir.status === 'fulfilled' && Array.isArray(ir.value.data)) {
-        setInventory(ir.value.data);
+      if (ir.status === 'fulfilled' && Array.isArray(ir.value.data)) setInventory(ir.value.data);
+
+      let cfg = (pr.status === 'fulfilled' && parseAvatarConfig(pr.value.data.avatar_config)) || defaultAvatarConfig();
+      // 3D-only: ensure a model is selected.
+      if (!cfg.model_url && models[0]) {
+        cfg = { ...cfg, provider: '3d', model_url: models[0].url, model_scale: models[0].scale, model_thumb: models[0].thumb };
       }
+      cfg.provider = '3d';
+      setConfig(cfg);
     } catch (_) {
       setConfig(defaultAvatarConfig());
     } finally { setLoading(false); }
   };
 
-  const pickStyle = (s) => {
+  const pick3dModel = (m) => {
     haptics.selection();
-    setConfig((c) => ({ ...c, provider: s.provider, style: s.key }));
+    setConfig((c) => ({ ...c, provider: '3d', model_url: m.url, model_scale: m.scale, model_thumb: m.thumb }));
   };
 
-  const randomize = () => { haptics.light(); setConfig((c) => ({ ...c, seed: randomSeed() })); };
-
-  const toggleItem = (slug) => {
+  const toggleItem = (id) => {
     haptics.selection();
     setConfig((c) => {
       const items = c.items || [];
-      return { ...c, items: items.includes(slug) ? items.filter((x) => x !== slug) : [...items, slug] };
+      return { ...c, items: items.includes(id) ? items.filter((x) => x !== id) : [...items, id] };
     });
   };
 
@@ -69,7 +69,7 @@ export default function AvatarStudio({ navigation }) {
     setSaving(true);
     try {
       await axiosInstance.put('users/api/profile/', { avatar_config: JSON.stringify(config) });
-      reward(0, { big: true });
+      reward(0, { big: true, flash: 'success' });
       Alert.alert('Kaydedildi 🎉', 'Avatarın güncellendi.', [{ text: 'Tamam', onPress: () => navigation.goBack() }]);
     } catch (_) {
       haptics.error();
@@ -77,29 +77,11 @@ export default function AvatarStudio({ navigation }) {
     } finally { setSaving(false); }
   };
 
-  const is3d = config.provider === '3d';
-  const dressable = is3d
-    ? inventory.some((item) => item.model_glb || item.model_url)
-    : config.style === 'avataaars';
-  const equippedGlbs = is3d
-    ? (config.items || []).map((id) => inventory.find((item) => item.id === id)).filter(Boolean).map((item) => item.model_glb || item.model_url).filter(Boolean)
-    : [];
-  const previewUri = buildAvatarUrl(config);
-
-  const setMode = (mode) => {
-    haptics.selection();
-    if (mode === '3d') {
-      const m = models3d[0] || SAMPLE_MODELS[0];
-      setConfig((c) => ({ ...c, provider: '3d', model_url: c.model_url || m.url, model_scale: c.model_scale || m.scale, model_thumb: c.model_thumb || m.thumb }));
-    } else {
-      setConfig((c) => ({ ...c, provider: 'dicebear', style: c.style && c.style !== 'kitten' ? c.style : 'avataaars' }));
-    }
-  };
-
-  const pick3dModel = (m) => {
-    haptics.selection();
-    setConfig((c) => ({ ...c, provider: '3d', model_url: m.url, model_scale: m.scale, model_thumb: m.thumb }));
-  };
+  const dressItems = inventory.filter((it) => it.model_glb || it.model_url);
+  const equippedGlbs = (config.items || [])
+    .map((id) => dressItems.find((it) => it.id === id))
+    .filter(Boolean)
+    .map((it) => it.model_glb || it.model_url);
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8b5cf6" /></View>;
@@ -116,95 +98,42 @@ export default function AvatarStudio({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        {/* 2D / 3D mode toggle */}
-        <View style={styles.modeTabs}>
-          <Pressable style={[styles.modeTab, !is3d && styles.modeTabActive]} onPress={() => setMode('2d')}>
-            <Text style={[styles.modeTabText, !is3d && styles.modeTabTextActive]}>2B</Text>
-          </Pressable>
-          <Pressable style={[styles.modeTab, is3d && styles.modeTabActive]} onPress={() => setMode('3d')}>
-            <Text style={[styles.modeTabText, is3d && styles.modeTabTextActive]}>3B</Text>
+        {/* 3D preview (drag to rotate) with a fullscreen expand button */}
+        <View style={styles.previewBox}>
+          <Avatar3D url={config.model_url} scale={config.model_scale || 1.2} height={260}
+                    style={{ width: '100%', borderRadius: 18, backgroundColor: '#eef2ff' }} />
+          <Pressable style={styles.expandBtn} onPress={() => setViewer(true)}>
+            <Ionicons name="scan" size={18} color="#fff" />
           </Pressable>
         </View>
+        <Text style={styles.dragHint}>Döndürmek için sürükle · büyütmek için ⛶</Text>
 
-        {/* Preview */}
-        {is3d ? (
-          <View style={styles.previewBox}>
-            <Avatar3D url={config.model_url} scale={config.model_scale || 0.045} equippedItems={equippedGlbs} height={240} style={{ width: '100%', borderRadius: 16, backgroundColor: '#eef2ff' }} />
-          </View>
-        ) : (
-          <View style={styles.previewBox}>
-            {previewUri ? (
-              <Image source={{ uri: previewUri }} style={styles.preview} />
-            ) : (
-              <ActivityIndicator color="#8b5cf6" />
-            )}
-            <Pressable style={styles.randomBtn} onPress={randomize}>
-              <Ionicons name="dice" size={18} color="#fff" />
-              <Text style={styles.randomText}>Karıştır</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {is3d && (
-          <>
-            <Text style={styles.section}>3B Model</Text>
-            <View style={styles.chipWrap}>
-              {models3d.map((m) => {
-                const active = config.model_url === m.url;
-                return (
-                  <Pressable key={m.url} style={[styles.chip, active && styles.chipActive]} onPress={() => pick3dModel(m)}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={styles.hint}>
-              Bunlar örnek modeller. Hunyuan3D ile ürettiğin GLB'leri backend media'ya
-              koyup buraya ekleyince kendi karakterlerin görünür.
-            </Text>
-          </>
-        )}
-
-        {/* Style (2D) */}
-        {!is3d && <Text style={styles.section}>Karakter</Text>}
-        {!is3d && (
+        <Text style={styles.section}>Karakter</Text>
         <View style={styles.chipWrap}>
-          {AVATAR_STYLES.map((s) => {
-            const active = config.style === s.key;
+          {models3d.map((m) => {
+            const active = config.model_url === m.url;
             return (
-              <Pressable key={s.key} style={[styles.chip, active && styles.chipActive]} onPress={() => pickStyle(s)}>
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+              <Pressable key={m.url} style={[styles.chip, active && styles.chipActive]} onPress={() => pick3dModel(m)}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
               </Pressable>
             );
           })}
         </View>
-        )}
 
-        {/* Dress-up */}
-        {dressable && <Text style={styles.section}>Kıyafet & Aksesuar</Text>}
-        {dressable && (
+        <Text style={styles.section}>Kıyafet & Aksesuar</Text>
+        {dressItems.length === 0 ? (
+          <Text style={styles.hint}>Henüz 3B aksesuar yok. Kazandıkça burada görünecek.</Text>
+        ) : (
           <View style={styles.chipWrap}>
-            {is3d ? (
-              inventory.filter((item) => item.model_glb || item.model_url).map((it) => {
-                const active = (config.items || []).includes(it.id);
-                return (
-                  <Pressable key={it.id} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.id)}>
-                    <Text style={styles.itemEmoji}>🎒</Text>
-                    <Text style={[styles.itemLabel, active && { color: '#fff' }]}>{it.name}</Text>
-                  </Pressable>
-                );
-              })
-            ) : (
-              DRESS_ITEMS.map((it) => {
-                const active = (config.items || []).includes(it.slug);
-                return (
-                  <Pressable key={it.slug} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.slug)}>
-                    <Text style={styles.itemEmoji}>{it.emoji}</Text>
-                    <Text style={[styles.itemLabel, active && { color: '#fff' }]}>{it.label}</Text>
-                  </Pressable>
-                );
-              })
-            )}
+            {dressItems.map((it) => {
+              const active = (config.items || []).includes(it.id);
+              return (
+                <Pressable key={it.id} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.id)}>
+                  <Text style={styles.itemEmoji}>🎒</Text>
+                  <Text style={[styles.itemLabel, active && { color: '#fff' }]} numberOfLines={1}>{it.name}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -212,6 +141,8 @@ export default function AvatarStudio({ navigation }) {
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Kaydet</Text>}
         </Pressable>
       </ScrollView>
+
+      <Avatar3DModal visible={viewer} url={config.model_url} scale={config.model_scale || 1.2} onClose={() => setViewer(false)} />
     </SafeAreaView>
   );
 }
@@ -222,15 +153,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
 
-  modeTabs: { flexDirection: 'row', backgroundColor: '#f1f1f4', borderRadius: 12, padding: 4, marginBottom: 16, alignSelf: 'center' },
-  modeTab: { paddingHorizontal: 28, paddingVertical: 8, borderRadius: 9 },
-  modeTabActive: { backgroundColor: '#8b5cf6' },
-  modeTabText: { fontWeight: '800', color: '#666' },
-  modeTabTextActive: { color: '#fff' },
-  previewBox: { alignItems: 'center', marginBottom: 16 },
-  preview: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#eef2ff' },
-  randomBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#8b5cf6', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, marginTop: 14 },
-  randomText: { color: '#fff', fontWeight: '700' },
+  previewBox: { marginBottom: 6, position: 'relative' },
+  expandBtn: { position: 'absolute', right: 12, bottom: 12, backgroundColor: '#0891b2', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  dragHint: { textAlign: 'center', color: '#999', fontSize: 12, marginBottom: 10 },
 
   section: { fontSize: 15, fontWeight: '800', color: '#333', marginTop: 18, marginBottom: 10 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

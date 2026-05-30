@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
+import Avatar from './components/Avatar';
 
 const { width } = Dimensions.get('window');
 
@@ -217,13 +218,13 @@ export default function Conversations({ navigation }) {
         style={[styles.card, { backgroundColor: theme.bg }]}
         onPress={() => navigation.navigate('Chat', { conversationId: item.id })}
       >
-        <View style={[styles.avatarCircle, { backgroundColor: theme.icon }]}>
-          {item.is_group ? (
+        {item.is_group ? (
+          <View style={[styles.avatarCircle, { backgroundColor: theme.icon }]}>
             <Ionicons name="people" size={24} color="#fff" />
-          ) : (
-            <Text style={styles.avatarText}>{initial}</Text>
-          )}
-        </View>
+          </View>
+        ) : (
+          <Avatar user={otherUser} size={50} style={{ marginRight: 15 }} />
+        )}
 
         <View style={styles.cardContent}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

@@ -49,10 +49,9 @@ export const SAMPLE_MODELS = [
 export const randomSeed = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
 
+// 3D-only: a fresh config picks a 3D character (model set by AvatarStudio).
 export const defaultAvatarConfig = (username = 'habitbud') => ({
-  provider: 'dicebear',
-  style: 'avataaars',
-  seed: username || 'habitbud',
+  provider: '3d',
   items: [],
 });
 
@@ -60,7 +59,8 @@ export function parseAvatarConfig(raw, username) {
   if (!raw) return null;
   try {
     const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (cfg && cfg.style) return cfg;
+    // Accept 3D configs (model_url/model_thumb) and legacy 2D (style) configs.
+    if (cfg && (cfg.provider === '3d' || cfg.model_url || cfg.model_thumb || cfg.style)) return cfg;
   } catch (_) {}
   return null;
 }

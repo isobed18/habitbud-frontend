@@ -19,7 +19,7 @@ import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import Avatar from './components/Avatar';
-import Avatar3D from './components/Avatar3D';
+import Avatar3DModal from './components/Avatar3DModal';
 import { parseAvatarConfig } from './utils/avatar';
 
 const { width } = Dimensions.get('window');
@@ -35,6 +35,7 @@ const TIMEZONES = [
 
 const ProfilePage = ({ navigation }) => {
   const [profile, setProfile] = useState(null);
+  const [viewer3D, setViewer3D] = useState(null); // 3D fullscreen viewer config
   const [friendRequests, setFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [username, setUsername] = useState('');
@@ -246,18 +247,31 @@ const ProfilePage = ({ navigation }) => {
       </View>
       {profile && (
         <View style={styles.profileCard}>
-          <Pressable onPress={() => navigation.navigate('AvatarStudio')} style={{ marginBottom: 10 }}>
+          <View style={{ marginBottom: 10 }}>
+            <Pressable onPress={() => navigation.navigate('AvatarStudio')}>
+              <Avatar user={profile} size={104} />
+              <View style={styles.avatarEditBadge}>
+                <Ionicons name="brush" size={14} color="#fff" />
+              </View>
+            </Pressable>
             {(() => {
               const cfg = parseAvatarConfig(profile.avatar_config, profile.username);
-              if (cfg?.provider === '3d' && cfg.model_url) {
-                return <Avatar3D url={cfg.model_url} scale={cfg.model_scale || 0.045} height={130} style={{ width: 130, borderRadius: 16, backgroundColor: '#eef2ff' }} />;
+              if (cfg?.model_url) {
+                return (
+                  <Pressable style={styles.avatarExpandBadge} onPress={() => setViewer3D(cfg)}>
+                    <Ionicons name="scan" size={16} color="#fff" />
+                  </Pressable>
+                );
               }
-              return <Avatar user={profile} size={84} />;
+              return null;
             })()}
-            <View style={styles.avatarEditBadge}>
-              <Ionicons name="brush" size={14} color="#fff" />
-            </View>
-          </Pressable>
+          </View>
+          <Avatar3DModal
+            visible={!!viewer3D}
+            url={viewer3D?.model_url}
+            scale={viewer3D?.model_scale || 1.2}
+            onClose={() => setViewer3D(null)}
+          />
           <Text style={styles.usernameText}>{profile.username}</Text>
           <Text style={styles.bioText}>{profile.bio || 'Henüz biyografi yok.'}</Text>
           <Text style={styles.timezoneText}>🕒 {profile.timezone || 'Europe/Istanbul'}</Text>
@@ -580,7 +594,8 @@ const styles = StyleSheet.create({
   profileCard: { backgroundColor: '#f9fafb', borderRadius: 20, padding: 20, alignItems: 'center' },
   avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#ff7f50', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
-  avatarEditBadge: { position: 'absolute', right: -2, bottom: 8, backgroundColor: '#8b5cf6', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  avatarEditBadge: { position: 'absolute', left: -2, bottom: 4, backgroundColor: '#8b5cf6', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  avatarExpandBadge: { position: 'absolute', right: -2, bottom: 4, backgroundColor: '#0891b2', width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   usernameText: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   bioText: { fontSize: 14, color: '#666', marginTop: 5, textAlign: 'center', paddingHorizontal: 20 },
   timezoneText: { fontSize: 12, color: '#666', marginTop: 8, fontStyle: 'italic' },
