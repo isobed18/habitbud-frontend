@@ -15,13 +15,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { reward, haptics } from './utils/feedback';
 import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
-import XPToast from './components/XPToast';
 import EmptyState from './components/EmptyState';
 
 const getThemeColor = (indexOrKey) => {
@@ -78,8 +77,6 @@ export default function Home({ navigation }) {
   const [loadingStats, setLoadingStats] = useState(false);
 
   // XP Toast
-  const [xpGained, setXpGained] = useState(0);
-  const [showXP, setShowXP] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -362,16 +359,15 @@ export default function Home({ navigation }) {
                     console.log('Current streak before refresh:', item.streak);
 
                     if (newCount >= item.target_count) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      const mult = calculateStreakMultiplier(item.streak);
-                      const baseXP = 10;
-                      const earnedXP = Math.round(baseXP * mult);
-                      setXpGained(earnedXP);
-                      setShowXP(true);
-                      const bonusMsg = mult > 1.0 ? `\n${mult}x Bonus XP!` : '';
-                      Alert.alert('Tebrikler! 🎉', `Hedefine ulaştın!${bonusMsg}`, [{ text: 'Kanıt Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) }]);
+                      // Self-completion = flat reward; the big multiplied XP
+                      // comes when a friend approves your check.
+                      reward(5, { label: 'Tamamlandı' });
+                      Alert.alert('Tebrikler! 🎉', 'Hedefine ulaştın! Şimdi check gönder, arkadaşların onaylasın 🔥', [
+                        { text: 'Sonra', style: 'cancel' },
+                        { text: 'Check Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) },
+                      ]);
                     } else {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      haptics.light();
                     }
                     await fetchHabits();
                   } catch (e) {
@@ -409,7 +405,6 @@ export default function Home({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <XPToast xp={xpGained} visible={showXP} onDone={() => setShowXP(false)} />
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderCalendarStrip()}
         <View style={styles.listContainer}>

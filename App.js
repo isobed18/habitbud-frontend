@@ -28,6 +28,7 @@ import { getAccessToken } from './utils/auth';
 import { navigationRef } from './services/axiosInstance';
 import { registerForPushNotifications } from './utils/push';
 import * as ExpoNotifications from 'expo-notifications';
+import RewardOverlay from './components/RewardOverlay';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -198,6 +199,7 @@ export default function App() {
             />
           </Stack.Navigator>
         </NavigationContainer>
+        <RewardOverlay />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
