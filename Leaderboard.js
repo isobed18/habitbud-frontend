@@ -21,11 +21,10 @@ const Leaderboard = ({ navigation }) => {
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentUserId, setCurrentUserId] = useState(null);
+    const [scope, setScope] = useState('friends');
 
-    useEffect(() => {
-        fetchLeaderboard();
-        fetchCurrentUser();
-    }, []);
+    useEffect(() => { fetchCurrentUser(); }, []);
+    useEffect(() => { fetchLeaderboard(); }, [scope]);
 
     const fetchCurrentUser = async () => {
         try {
@@ -35,8 +34,9 @@ const Leaderboard = ({ navigation }) => {
     };
 
     const fetchLeaderboard = async () => {
+        setLoading(true);
         try {
-            const response = await axiosInstance.get('users/api/leaderboard/');
+            const response = await axiosInstance.get(`users/api/leaderboard/?scope=${scope}`);
             setLeaderboardData(unwrapPagination(response.data));
         } catch (error) {
             Alert.alert('Hata!', 'Liderlik tablosu yüklenemedi.');
@@ -148,6 +148,21 @@ const Leaderboard = ({ navigation }) => {
                         <Ionicons name="trophy" size={24} color="#FFD700" />
                         <Text style={styles.title}>Liderlik Tablosu</Text>
                     </View>
+                    <View style={styles.scopeTabs}>
+                        {[
+                            { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
+                            { key: 'region', label: 'Bölge', icon: 'location' },
+                            { key: 'global', label: 'Top', icon: 'globe' },
+                        ].map((s) => {
+                            const active = scope === s.key;
+                            return (
+                                <Pressable key={s.key} style={[styles.scopeTab, active && styles.scopeTabActive]} onPress={() => setScope(s.key)}>
+                                    <Ionicons name={s.icon} size={15} color={active ? '#764ba2' : 'rgba(255,255,255,0.85)'} />
+                                    <Text style={[styles.scopeTabText, active && styles.scopeTabTextActive]}>{s.label}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
                 </SafeAreaView>
 
                 {renderPodium()}
@@ -186,6 +201,26 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#fff',
     },
+    scopeTabs: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        marginHorizontal: 20,
+        borderRadius: 14,
+        padding: 4,
+        gap: 4,
+    },
+    scopeTab: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 5,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    scopeTabActive: { backgroundColor: '#fff' },
+    scopeTabText: { color: 'rgba(255,255,255,0.9)', fontWeight: '700', fontSize: 13 },
+    scopeTabTextActive: { color: '#764ba2' },
 
     // Podium
     podiumContainer: {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Switch, ScrollView, ActivityIndicator, Image, Alert,
+  View, Text, StyleSheet, Pressable, Switch, ScrollView, ActivityIndicator, Image, Alert, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ export default function Settings({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [isPrivate, setIsPrivate] = useState(false);
   const [messagePrivacy, setMessagePrivacy] = useState('everyone');
+  const [region, setRegion] = useState('');
   const [blocked, setBlocked] = useState([]);
 
   useEffect(() => { load(); }, []);
@@ -33,6 +34,7 @@ export default function Settings({ navigation }) {
       if (p.status === 'fulfilled') {
         setIsPrivate(!!p.value.data.is_private);
         setMessagePrivacy(p.value.data.message_privacy || 'everyone');
+        setRegion(p.value.data.region || '');
       }
       if (b.status === 'fulfilled') setBlocked(unwrapPagination(b.value.data));
     } catch (_) {}
@@ -121,6 +123,18 @@ export default function Settings({ navigation }) {
                 { key: 'dark', label: t('dark'), onPress: setTheme },
               ]} />
             </View>
+            <View style={[styles.divider, { backgroundColor: c.border }]} />
+            <Text style={[styles.rowLabel, { color: c.text, marginBottom: 8 }]}>
+              {language === 'en' ? 'Region' : 'Bölge'}
+            </Text>
+            <TextInput
+              style={[styles.regionInput, { color: c.text, borderColor: c.border }]}
+              placeholder={language === 'en' ? 'e.g. Istanbul, Turkey' : 'örn. İstanbul, Türkiye'}
+              placeholderTextColor={c.sub}
+              value={region}
+              onChangeText={setRegion}
+              onBlur={() => savePrivacy({ region })}
+            />
           </Section>
 
           {/* Privacy */}
@@ -181,6 +195,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rowLabel: { fontSize: 16, fontWeight: '600' },
   rowSub: { fontSize: 12, marginTop: 2 },
+  regionInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   divider: { height: 1, marginVertical: 12 },
   segment: { flexDirection: 'row', borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
   segmentItem: { paddingHorizontal: 12, paddingVertical: 7 },
