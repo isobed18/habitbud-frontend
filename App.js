@@ -97,9 +97,9 @@ function MainTabs() {
       tabBar={props => <CustomTabBar {...props} />}
       initialRouteName="Home"
     >
-      <Tab.Screen name="Leaderboard" component={Leaderboard} />
-      <Tab.Screen name="Challenges" component={Challenges} />
+      {/* Order: Home (left), Messages, + (add habit), Challenges, Profile */}
       <Tab.Screen name="Home" component={Home} />
+      <Tab.Screen name="Conversations" component={Conversations} />
       {/* Middle dummy tab for FAB */}
       <Tab.Screen
         name="AddHabitPlaceholder"
@@ -112,7 +112,7 @@ function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="Conversations" component={Conversations} />
+      <Tab.Screen name="Challenges" component={Challenges} />
       <Tab.Screen name="Profile" component={Profile} />
     </Tab.Navigator>
   );
@@ -188,6 +188,7 @@ export default function App() {
             <Stack.Screen name="FriendProfile" component={FriendProfile} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Notifications" component={Notifications} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Achievements" component={Achievements} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Leaderboard" component={Leaderboard} options={{ animation: 'slide_from_right' }} />
 
             <Stack.Screen
               name="AddHabitModal"

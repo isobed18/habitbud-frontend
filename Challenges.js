@@ -13,9 +13,9 @@ import {
     Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
+import { haptics } from './utils/feedback';
 
 const { width } = Dimensions.get('window');
 
@@ -117,7 +117,7 @@ export default function Challenges({ navigation }) {
             return;
         }
 
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        haptics.medium();
         try {
             const payload = {
                 habit_name: selectedTemplate.predefined_habit_name,
@@ -165,6 +165,7 @@ export default function Challenges({ navigation }) {
         const isExpanded = expandedTemplateId === item.id;
         const type = (item.challenge_type || 'SOLO').toUpperCase();
         const isDuo = type === 'DUO';
+        const isCompleted = (item.my_status || '').toUpperCase() === 'COMPLETED';
 
         return (
             <Pressable
@@ -181,7 +182,28 @@ export default function Challenges({ navigation }) {
                     </View>
                 </View>
 
-                <Text style={styles.templateTitle}>{item.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.templateTitle, { flex: 1 }]}>{item.name}</Text>
+                    {item.reward_item?.image && (
+                        <Image source={{ uri: getImageUrl(item.reward_item.image) }} style={styles.metaRewardThumb} />
+                    )}
+                </View>
+
+                {/* Always-visible meta: total joined + completed state */}
+                <View style={styles.metaRow}>
+                    <View style={styles.participantBadge}>
+                        <Ionicons name="people" size={12} color="#666" />
+                        <Text style={styles.participantText}>{item.total_participants || 0} kişi katıldı</Text>
+                    </View>
+                    {isCompleted && (
+                        <View style={styles.completedChip}>
+                            <Ionicons name="checkmark-circle" size={12} color="#16a34a" />
+                            <Text style={styles.completedChipText}>
+                                Tamamlandı{item.my_completed_date ? ` · ${item.my_completed_date}` : ''}
+                            </Text>
+                        </View>
+                    )}
+                </View>
 
                 {isExpanded && (
                     <View style={{ marginTop: 10 }}>
@@ -215,16 +237,24 @@ export default function Challenges({ navigation }) {
                             </View>
                         )}
 
-                        <Pressable
-                            style={styles.joinBtn}
-                            onPress={() => {
-                                setSelectedTemplate(item);
-                                setLinkedHabitName(item.predefined_habit_name);
-                                setJoinModalVisible(true);
-                            }}
-                        >
-                            <Text style={styles.joinBtnText}>Katıl</Text>
-                        </Pressable>
+                        {isCompleted ? (
+                            <View style={styles.joinBtnDone}>
+                                <Text style={styles.joinBtnDoneStrike}>Katıl</Text>
+                                <Text style={styles.joinBtnDoneLabel}>🏆 Tamamlandı</Text>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.joinBtn}
+                                onPress={() => {
+                                    haptics.selection();
+                                    setSelectedTemplate(item);
+                                    setLinkedHabitName(item.predefined_habit_name);
+                                    setJoinModalVisible(true);
+                                }}
+                            >
+                                <Text style={styles.joinBtnText}>Katıl</Text>
+                            </Pressable>
+                        )}
                     </View>
                 )}
             </Pressable>
@@ -335,7 +365,9 @@ export default function Challenges({ navigation }) {
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </Pressable>
                 <Text style={styles.headerTitle}>Misyonlar & Ödüller</Text>
-                <View style={{ width: 40 }} />
+                <Pressable onPress={() => { haptics.selection(); navigation.navigate('Leaderboard'); }} style={styles.lbBtn}>
+                    <Ionicons name="podium" size={18} color="#fff" />
+                </Pressable>
             </View>
 
             <View style={styles.tabContainer}>
@@ -472,6 +504,15 @@ const styles = StyleSheet.create({
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, paddingTop: 50, backgroundColor: '#fff' },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     backBtn: { padding: 5 },
+    lbBtn: { backgroundColor: '#8b5cf6', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+
+    metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' },
+    metaRewardThumb: { width: 36, height: 36, borderRadius: 8, marginLeft: 8 },
+    completedChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#dcfce7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 },
+    completedChipText: { fontSize: 10, color: '#166534', fontWeight: 'bold' },
+    joinBtnDone: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f3f4f6', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, alignSelf: 'flex-start' },
+    joinBtnDoneStrike: { color: '#9ca3af', fontWeight: 'bold', textDecorationLine: 'line-through' },
+    joinBtnDoneLabel: { color: '#16a34a', fontWeight: 'bold' },
 
     tabContainer: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
     tab: { flex: 1, paddingVertical: 15, alignItems: 'center' },

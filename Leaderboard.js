@@ -7,6 +7,7 @@ import {
     Alert,
     Dimensions,
     ActivityIndicator,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -139,6 +140,11 @@ const Leaderboard = ({ navigation }) => {
             >
                 <SafeAreaView edges={['top']}>
                     <View style={styles.header}>
+                        {navigation?.canGoBack?.() && (
+                            <Pressable onPress={() => navigation.goBack()} style={{ position: 'absolute', left: 16 }}>
+                                <Ionicons name="arrow-back" size={24} color="#fff" />
+                            </Pressable>
+                        )}
                         <Ionicons name="trophy" size={24} color="#FFD700" />
                         <Text style={styles.title}>Liderlik Tablosu</Text>
                     </View>
