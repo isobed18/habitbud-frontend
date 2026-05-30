@@ -10,7 +10,9 @@ import {
   Dimensions,
   Modal,
   ScrollView,
-  Image
+  Image,
+  TextInput,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
@@ -35,6 +37,45 @@ export default function Conversations({ navigation }) {
   const [activeStoryGroup, setActiveStoryGroup] = useState(null);
   const [storyIndex, setStoryIndex] = useState(0);
   const [storyModalVisible, setStoryModalVisible] = useState(false);
+
+  // Group rooms
+  const [roomModalVisible, setRoomModalVisible] = useState(false);
+  const [roomName, setRoomName] = useState('');
+  const [friends, setFriends] = useState([]);
+  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [creatingRoom, setCreatingRoom] = useState(false);
+
+  const openRoomModal = async () => {
+    setRoomName('');
+    setSelectedFriends([]);
+    setRoomModalVisible(true);
+    try {
+      const res = await axiosInstance.get('friends/list/');
+      setFriends(unwrapPagination(res.data));
+    } catch (e) { console.log('friends load failed', e?.message); }
+  };
+
+  const toggleRoomFriend = (id) => {
+    setSelectedFriends((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const createRoom = async () => {
+    if (!roomName.trim()) { Alert.alert('Hata', 'Oda adı gerekli.'); return; }
+    setCreatingRoom(true);
+    try {
+      const res = await axiosInstance.post('chat/rooms/', {
+        name: roomName.trim(),
+        participant_ids: selectedFriends,
+      });
+      setRoomModalVisible(false);
+      setCreatingRoom(false);
+      await fetchConversations();
+      navigation.navigate('Chat', { conversationId: res.data.id });
+    } catch (e) {
+      setCreatingRoom(false);
+      Alert.alert('Hata', 'Oda oluşturulamadı.');
+    }
+  };
 
   const fetchCurrentUser = async () => {
     try {
@@ -168,6 +209,8 @@ export default function Conversations({ navigation }) {
     const otherUser = getOtherParticipant(item.participants);
     const lastMessage = item.last_message;
     const theme = pastelColors[index % pastelColors.length];
+    const title = item.display_name || (item.is_group ? (item.name || 'Grup') : (otherUser ? otherUser.username : 'Bilinmeyen'));
+    const initial = item.is_group ? null : (title ? title.charAt(0).toUpperCase() : '?');
 
     return (
       <Pressable
@@ -175,14 +218,18 @@ export default function Conversations({ navigation }) {
         onPress={() => navigation.navigate('Chat', { conversationId: item.id })}
       >
         <View style={[styles.avatarCircle, { backgroundColor: theme.icon }]}>
-          <Text style={styles.avatarText}>
-            {otherUser ? otherUser.username.charAt(0).toUpperCase() : '?'}
-          </Text>
+          {item.is_group ? (
+            <Ionicons name="people" size={24} color="#fff" />
+          ) : (
+            <Text style={styles.avatarText}>{initial}</Text>
+          )}
         </View>
 
         <View style={styles.cardContent}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={styles.username}>{otherUser ? otherUser.username : 'Bilinmeyen'}</Text>
+            <Text style={styles.username} numberOfLines={1}>
+              {item.is_group ? '👥 ' : ''}{title}
+            </Text>
             {lastMessage && (
               <Text style={styles.timeText}>{formatDate(lastMessage.created_at)}</Text>
             )}
@@ -193,7 +240,7 @@ export default function Conversations({ navigation }) {
               <Ionicons name="image-outline" size={14} color="#666" style={{ marginRight: 4 }} />
             )}
             <Text style={styles.messageText} numberOfLines={1}>
-              {lastMessage ? (lastMessage.message_type === 'PROOF' ? 'Kanıt Gönderdi' : lastMessage.content) : 'Henüz mesaj yok'}
+              {lastMessage ? (lastMessage.message_type === 'PROOF' ? 'Check Gönderdi' : lastMessage.content) : 'Henüz mesaj yok'}
             </Text>
           </View>
         </View>
@@ -205,8 +252,12 @@ export default function Conversations({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={{ padding: 20, paddingBottom: 10 }}>
+      <View style={{ padding: 20, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={styles.title}>Sohbetler</Text>
+        <Pressable style={styles.newRoomBtn} onPress={openRoomModal}>
+          <Ionicons name="people" size={18} color="#fff" />
+          <Text style={styles.newRoomBtnText}>Oda</Text>
+        </Pressable>
       </View>
 
       {/* Stories Strip */}
@@ -260,6 +311,54 @@ export default function Conversations({ navigation }) {
         }
       />
 
+
+      {/* Create Room Modal */}
+      <Modal visible={roomModalVisible} animationType="slide" transparent>
+        <View style={styles.roomModalOverlay}>
+          <View style={styles.roomModalCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <Text style={styles.roomModalTitle}>Yeni Grup Odası 👥</Text>
+              <Pressable onPress={() => setRoomModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color="#ccc" />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.roomNameInput}
+              placeholder="Oda adı (örn. Spor Ekibi)"
+              value={roomName}
+              onChangeText={setRoomName}
+            />
+
+            <Text style={styles.roomSectionLabel}>Arkadaş Ekle</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {friends.map((f) => {
+                const isSel = selectedFriends.includes(f.id);
+                return (
+                  <Pressable key={f.id} style={styles.roomFriendRow} onPress={() => toggleRoomFriend(f.id)}>
+                    <View style={styles.roomFriendAvatar}>
+                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>{f.username.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.roomFriendName}>{f.username}</Text>
+                    <View style={[styles.roomCheckbox, isSel && styles.roomCheckboxActive]}>
+                      {isSel && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+              {friends.length === 0 && (
+                <Text style={{ color: '#999', textAlign: 'center', marginVertical: 15 }}>Henüz arkadaşın yok.</Text>
+              )}
+            </ScrollView>
+
+            <Pressable style={[styles.roomCreateBtn, creatingRoom && { opacity: 0.6 }]} onPress={createRoom} disabled={creatingRoom}>
+              {creatingRoom ? <ActivityIndicator color="#fff" /> : (
+                <Text style={styles.roomCreateBtnText}>Oda Oluştur</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Story Modal */}
       <Modal visible={storyModalVisible} animationType="fade" transparent>
@@ -382,6 +481,22 @@ const styles = StyleSheet.create({
 
   interactionRow: { alignItems: 'center' },
   likeBtn: { alignItems: 'center' },
-  likeCount: { color: '#fff', fontWeight: 'bold', marginTop: 4, fontSize: 14 }
+  likeCount: { color: '#fff', fontWeight: 'bold', marginTop: 4, fontSize: 14 },
+
+  // Group room
+  newRoomBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ff7f50', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 6 },
+  newRoomBtnText: { color: '#fff', fontWeight: 'bold' },
+  roomModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  roomModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
+  roomModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  roomNameInput: { backgroundColor: '#f5f5f5', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 15 },
+  roomSectionLabel: { fontSize: 14, fontWeight: '700', color: '#666', marginBottom: 8 },
+  roomFriendRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  roomFriendAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#a855f7', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  roomFriendName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
+  roomCheckbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
+  roomCheckboxActive: { backgroundColor: '#ff7f50', borderColor: '#ff7f50' },
+  roomCreateBtn: { backgroundColor: '#ff7f50', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 15 },
+  roomCreateBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 

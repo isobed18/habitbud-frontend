@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { saveTokens } from './utils/auth';
+import { registerForPushNotifications } from './utils/push';
 
 export default function Login({ navigation }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -54,6 +55,7 @@ export default function Login({ navigation }) {
       const response = await axiosInstance.post('users/api/login/', { username, password });
       const { access, refresh, user } = response.data;
       await saveTokens(access, refresh);
+      registerForPushNotifications();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setLoading(false);
       navigation.replace('Main');
@@ -86,6 +88,7 @@ export default function Login({ navigation }) {
       });
       const { access, refresh, user } = response.data;
       await saveTokens(access, refresh);
+      registerForPushNotifications();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setLoading(false);
       navigation.replace('Main');

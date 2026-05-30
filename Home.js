@@ -520,7 +520,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#f9f9f9', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#eee' },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 5, color: '#444' },
   btn: { padding: 15, borderRadius: 12, backgroundColor: '#eee', alignItems: 'center' },
-  coachButton: { backgroundColor: '#8b5cf6', padding: 8, borderRadius: 20, marginLeft: 10 },
   multiplierBadge: { marginTop: 4, backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
   multiplierText: { fontSize: 10, fontWeight: 'bold', color: '#B46A00' }
 });

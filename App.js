@@ -26,6 +26,8 @@ import Achievements from './Achievements';
 // Utils & Services
 import { getAccessToken } from './utils/auth';
 import { navigationRef } from './services/axiosInstance';
+import { registerForPushNotifications } from './utils/push';
+import * as ExpoNotifications from 'expo-notifications';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -124,6 +126,10 @@ export default function App() {
       try {
         const token = await getAccessToken();
         setInitialRoute(token ? 'Main' : 'Login');
+        // If already logged in, register this device for push notifications.
+        if (token) {
+          registerForPushNotifications();
+        }
       } catch (error) {
         console.error('Auth check failed:', error);
         setInitialRoute('Login'); // Fallback
@@ -132,6 +138,16 @@ export default function App() {
       }
     };
     checkAuth();
+  }, []);
+
+  // Tapping a push notification jumps to the Notifications screen.
+  useEffect(() => {
+    const sub = ExpoNotifications.addNotificationResponseReceivedListener(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Notifications');
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   if (isLoading) {

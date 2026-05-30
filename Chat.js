@@ -11,15 +11,19 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { unwrapPagination } from './utils/api';
+import XPToast from './components/XPToast';
 
 export default function Chat({ route, navigation }) {
   const { conversationId } = route.params;
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [toastXp, setToastXp] = useState(0);
+  const [showToast, setShowToast] = useState(false);
   const [ws, setWs] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUser, setTypingUser] = useState(null);
@@ -236,7 +240,7 @@ export default function Chat({ route, navigation }) {
 
   const verifyProof = async (messageId, action) => {
     try {
-      const response = await axiosInstance.post(`chat/proof/${messageId}/verify/`, {
+      const response = await axiosInstance.post(`chat/checks/${messageId}/verify/`, {
         action: action,
       });
       // Update message in state
@@ -247,9 +251,23 @@ export default function Chat({ route, navigation }) {
             : msg
         )
       );
-      Alert.alert('Başarılı!', `Kanıt ${action === 'verify' ? 'doğrulandı' : 'reddedildi'}.`);
+      if (action === 'verify') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const earned = response.data.verifier_xp || 0;
+        if (earned > 0) {
+          setToastXp(earned);
+          setShowToast(true);
+        }
+        if (response.data.milestone) {
+          // Strong haptic + flame celebration for streak milestones 🔥
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          Alert.alert('🔥 Seri!', `Arkadaşının ${response.data.habit_streak} günlük serisini onayladın!`);
+        }
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
     } catch (error) {
-      console.error('Error verifying proof:', error.response?.data || error.message);
+      console.error('Error verifying check:', error.response?.data || error.message);
       const errorMsg = error.response?.data?.error ||
         (typeof error.response?.data === 'string' ? error.response.data : 'İşlem başarısız oldu.');
       Alert.alert('Hata!', errorMsg);
@@ -360,6 +378,7 @@ export default function Chat({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      <XPToast xp={toastXp} visible={showToast} onDone={() => setShowToast(false)} />
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#333" />

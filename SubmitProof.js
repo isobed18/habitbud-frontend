@@ -105,8 +105,8 @@ export default function SubmitProof({ route, navigation }) {
       setModalStep('share');
     } catch (error) {
       setLoading(false);
-      console.error('Submit Proof Error Detail:', error.response?.data || error.message);
-      Alert.alert('Hata', 'Kanıt gönderilemedi: ' + (error.response?.data?.error || error.message));
+      console.error('Submit Check Error Detail:', error.response?.data || error.message);
+      Alert.alert('Hata', "Check gönderilemedi: " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -169,22 +169,22 @@ export default function SubmitProof({ route, navigation }) {
           type: 'image/jpeg',
           name: 'proof.jpg',
         });
-        formData.append('content', content || 'Kanıt doğrulaması isteği gönderildi. 📸');
+        formData.append('content', content || "Check doğrulaması gönderildi 📸");
 
-        return axiosInstance.post('chat/proof/submit/', formData, {
+        return axiosInstance.post('chat/checks/submit/', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       });
 
       await Promise.all(promises);
 
-      // Also share to story if user wants?
-      // For now, let's just finish the friends flow.
+      // Paper-plane haptic: the check has taken off 🛫
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSendingToFriends(false);
       setModalStep('none');
       setSharingHabitId(null);
       navigation.goBack();
-      Alert.alert('Başarılı! 🚀', 'Arkadaşlarına doğrulama isteği gönderildi.');
+      Alert.alert('Gönderildi! 🚀', "Arkadaşlarına check'in gönderildi.");
     } catch (error) {
       setSendingToFriends(false);
       Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu.');
@@ -210,7 +210,7 @@ export default function SubmitProof({ route, navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.headerTitle}>Kanıt Gönder 📸</Text>
+        <Text style={styles.headerTitle}>Check Gönder 📸</Text>
 
         {/* Habit Selector as Chips */}
         <Text style={styles.label}>Hangi alışkanlık?</Text>
@@ -281,7 +281,7 @@ export default function SubmitProof({ route, navigation }) {
               <View style={[styles.iconBadge, { backgroundColor: '#8b5cf6' }]}>
                 <Ionicons name="share-social" size={30} color="#fff" />
               </View>
-              <Text style={styles.resultTitle}>Kanıtını Paylaş! 🎉</Text>
+              <Text style={styles.resultTitle}>Check'ini Paylaş! 🎉</Text>
               <Text style={styles.resultMsg}>Arkadaşlarınla veya hikayende paylaş</Text>
 
               <View style={{ width: '100%', gap: 10 }}>

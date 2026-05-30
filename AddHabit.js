@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,18 +18,24 @@ const getThemeColor = (index) => {
     return getHabitColor(index);
 };
 
-const PRESETS = [
-    { name: 'Kitap Okuma', icon: 'book', color: 'purple', type: 'count', target: 5 },
-    { name: 'Spor Yapma', icon: 'fitness', color: 'green', type: 'count', target: 1 },
-    { name: 'Meditasyon', icon: 'leaf', color: 'blue', type: 'time', target: 600 },
-    { name: 'Su İçme', icon: 'water', color: 'blue', type: 'count', target: 8 },
-    { name: 'Erken Uyanma', icon: 'alarm', color: 'yellow', type: 'count', target: 1 },
-];
-
 export default function AddHabit({ navigation }) {
     const [habitForm, setHabitForm] = useState({ name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily', colorIndex: 0 });
     const [habitType, setHabitType] = useState('count');
     const [timePickerVisible, setTimePickerVisible] = useState(false);
+    const [templates, setTemplates] = useState([]);
+    const [savingPreset, setSavingPreset] = useState(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await axiosInstance.get('habits/templates/');
+                // Endpoint is unpaginated, but stay defensive.
+                setTemplates(Array.isArray(res.data) ? res.data : (res.data?.results || []));
+            } catch (e) {
+                console.log('Templates load failed:', e?.message);
+            }
+        })();
+    }, []);
 
     const formatSecondsToTime = (seconds) => {
         if (!seconds && seconds !== 0) return '00:00:00';
@@ -59,23 +65,31 @@ export default function AddHabit({ navigation }) {
         }
     };
 
-    const addPreset = async (preset) => {
+    const addPreset = async (tpl) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSavingPreset(tpl.slug);
         try {
             const habitData = {
-                name: preset.name,
-                habit_type: preset.type,
-                color: preset.color,
-                frequency: 'daily',
-                target_count: preset.type === 'count' ? preset.target : null,
-                target_time: preset.type === 'time' ? formatSecondsToTime(preset.target) : null
+                name: tpl.name,
+                habit_type: tpl.habit_type,
+                color: tpl.color,
+                icon: tpl.icon,
+                frequency: tpl.default_frequency || 'daily',
+                target_count: tpl.habit_type === 'count' ? (tpl.default_target_count || 1) : null,
+                target_time: tpl.habit_type === 'time' ? formatSecondsToTime(tpl.default_target_count || 600) : null,
+                // Tells the backend to auto-create a habit-aware reminder.
+                template_slug: tpl.slug,
             };
             await axiosInstance.post('habits/', habitData);
-            Alert.alert('Başarılı', `${preset.name} eklendi!`, [
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert('Başarılı', `${tpl.icon} ${tpl.name} eklendi!`, [
                 { text: 'Tamam', onPress: () => navigation.goBack() }
             ]);
         } catch (error) {
-            Alert.alert('Hata', 'Preset eklenemedi.');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert('Hata', 'Hazır alışkanlık eklenemedi.');
+        } finally {
+            setSavingPreset(null);
         }
     };
 
@@ -88,18 +102,27 @@ export default function AddHabit({ navigation }) {
                 </Pressable>
             </View>
             <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Hızlı Ekle</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
-                    {PRESETS.map((p, i) => {
-                        const theme = getThemeColor(p.color);
+                <Text style={styles.label}>Hazır Alışkanlıklar</Text>
+                <View style={styles.presetGrid}>
+                    {templates.map((tpl) => {
+                        const theme = getThemeColor(tpl.color);
+                        const isSaving = savingPreset === tpl.slug;
                         return (
-                            <Pressable key={i} style={[styles.presetCard, { backgroundColor: theme.bg }]} onPress={() => addPreset(p)}>
-                                <Ionicons name={p.icon} size={24} color={theme.icon} />
-                                <Text style={[styles.presetText, { color: theme.icon }]}>{p.name}</Text>
+                            <Pressable
+                                key={tpl.id}
+                                style={[styles.presetCard, { backgroundColor: theme.bg, opacity: isSaving ? 0.5 : 1 }]}
+                                onPress={() => addPreset(tpl)}
+                                disabled={!!savingPreset}
+                            >
+                                <Text style={styles.presetEmoji}>{tpl.icon}</Text>
+                                <Text style={[styles.presetText, { color: theme.icon }]} numberOfLines={1}>{tpl.name}</Text>
                             </Pressable>
                         );
                     })}
-                </ScrollView>
+                    {templates.length === 0 && (
+                        <Text style={{ color: '#999', paddingVertical: 10 }}>Hazır alışkanlıklar yükleniyor…</Text>
+                    )}
+                </View>
 
                 <View style={styles.divider} />
                 <Text style={styles.label}>Manuel Ekle</Text>
@@ -180,8 +203,9 @@ const styles = StyleSheet.create({
     colorCircleActive: { borderWidth: 3, borderColor: '#333' },
     btn: { padding: 15, borderRadius: 12, alignItems: 'center' },
 
-    presetScroll: { marginBottom: 25 },
-    presetCard: { padding: 15, borderRadius: 15, alignItems: 'center', marginRight: 12, minWidth: 100, gap: 5 },
+    presetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10 },
+    presetCard: { paddingVertical: 12, paddingHorizontal: 10, borderRadius: 15, alignItems: 'center', width: '30%', gap: 4 },
+    presetEmoji: { fontSize: 26 },
     presetText: { fontSize: 12, fontWeight: 'bold' },
     divider: { height: 1, backgroundColor: '#eee', marginVertical: 20 },
 });
