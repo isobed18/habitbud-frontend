@@ -79,7 +79,7 @@ export default function RewardOverlay() {
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Celebration play={burst} />
+      <Celebration play={burst} lottieSource={require('../assets/lottie/confetti.json')} />
       {/* Flying chips, stacked above the badge */}
       <View style={styles.chipZone} pointerEvents="none">
         {chips.map((c) => (

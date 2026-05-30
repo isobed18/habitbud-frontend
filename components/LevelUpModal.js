@@ -11,6 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
+let LottieView = null;
+try { LottieView = require('lottie-react-native').default; } catch (_) {}
+let LEVELUP_SRC = null;
+try { LEVELUP_SRC = require('../assets/lottie/levelup.json'); } catch (_) {}
+
 const { width } = Dimensions.get('window');
 
 export default function LevelUpModal({ visible, level, onClose }) {
@@ -95,6 +100,9 @@ export default function LevelUpModal({ visible, level, onClose }) {
     return (
         <Modal visible={visible} transparent animationType="fade">
             <View style={styles.overlay}>
+                {LottieView && LEVELUP_SRC && (
+                    <LottieView source={LEVELUP_SRC} autoPlay loop={false} style={styles.lottieBg} pointerEvents="none" />
+                )}
                 <View style={styles.content}>
                     {/* Confetti Particles */}
                     {confettiAnims.map((anim, i) => (
@@ -166,6 +174,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    lottieBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     content: {
         alignItems: 'center',
         padding: 40,

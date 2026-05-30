@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { getHabitColor } from './utils/colors';
+import Avatar from './components/Avatar';
 
 export default function FriendProfile({ route, navigation }) {
     const { userId } = route.params;
@@ -139,8 +140,8 @@ export default function FriendProfile({ route, navigation }) {
 
             <ScrollView contentContainerStyle={{ padding: 20 }}>
                 <View style={styles.profileCard}>
-                    <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarText}>{friendData.username.charAt(0).toUpperCase()}</Text>
+                    <View style={{ marginBottom: 10 }}>
+                        <Avatar user={friendData} size={84} />
                     </View>
                     <Text style={styles.usernameText}>{friendData.username}</Text>
                     <Text style={styles.bioText}>{friendData.bio || 'Müsait'}</Text>

@@ -24,6 +24,7 @@ import Notifications from './Notifications';
 import Achievements from './Achievements';
 import Search from './Search';
 import Settings from './Settings';
+import AvatarStudio from './AvatarStudio';
 import { PreferencesProvider } from './utils/preferences';
 
 // Utils & Services
@@ -195,6 +196,7 @@ export default function App() {
             <Stack.Screen name="Leaderboard" component={Leaderboard} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Search" component={Search} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="Settings" component={Settings} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="AvatarStudio" component={AvatarStudio} options={{ animation: 'slide_from_bottom' }} />
 
             <Stack.Screen
               name="AddHabitModal"

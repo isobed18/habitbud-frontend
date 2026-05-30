@@ -4,9 +4,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axiosInstance, { getImageUrl } from './services/axiosInstance';
+import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { haptics } from './utils/feedback';
+import Avatar from './components/Avatar';
 
 export default function Search({ navigation }) {
   const [query, setQuery] = useState('');
@@ -73,11 +74,7 @@ export default function Search({ navigation }) {
           contentContainerStyle={{ padding: 16 }}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => openProfile(item.id)}>
-              {item.avatar ? (
-                <Image source={{ uri: getImageUrl(item.avatar) }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatar}><Text style={styles.avatarText}>{item.username.charAt(0).toUpperCase()}</Text></View>
-              )}
+              <Avatar user={item} size={48} />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.username}>{item.username}</Text>
                 <Text style={styles.sub}>Seviye {item.level} · {item.xp} XP</Text>

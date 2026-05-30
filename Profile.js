@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
+import Avatar from './components/Avatar';
 
 const { width } = Dimensions.get('window');
 
@@ -243,9 +244,12 @@ const ProfilePage = ({ navigation }) => {
       </View>
       {profile && (
         <View style={styles.profileCard}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{profile.username.charAt(0).toUpperCase()}</Text>
-          </View>
+          <Pressable onPress={() => navigation.navigate('AvatarStudio')} style={{ marginBottom: 10 }}>
+            <Avatar user={profile} size={84} />
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="brush" size={14} color="#fff" />
+            </View>
+          </Pressable>
           <Text style={styles.usernameText}>{profile.username}</Text>
           <Text style={styles.bioText}>{profile.bio || 'Henüz biyografi yok.'}</Text>
           <Text style={styles.timezoneText}>🕒 {profile.timezone || 'Europe/Istanbul'}</Text>
@@ -565,6 +569,7 @@ const styles = StyleSheet.create({
   profileCard: { backgroundColor: '#f9fafb', borderRadius: 20, padding: 20, alignItems: 'center' },
   avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#ff7f50', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
+  avatarEditBadge: { position: 'absolute', right: -2, bottom: 8, backgroundColor: '#8b5cf6', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   usernameText: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   bioText: { fontSize: 14, color: '#666', marginTop: 5, textAlign: 'center', paddingHorizontal: 20 },
   timezoneText: { fontSize: 12, color: '#666', marginTop: 8, fontStyle: 'italic' },
