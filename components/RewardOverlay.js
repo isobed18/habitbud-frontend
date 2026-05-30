@@ -45,7 +45,7 @@ export default function RewardOverlay() {
     const unsub = rewardBus.subscribe((event) => {
       const xp = event.xp || 0;
       // A "big" event always celebrates with confetti (level-up, avatar saved…).
-      if (event.big) setBurst((b) => b + 1);
+      if (event.big && xp > 0) setBurst((b) => b + 1);
       // But only show the "+N XP" chip/total for actions that actually earn XP.
       if (xp <= 0) return;
 

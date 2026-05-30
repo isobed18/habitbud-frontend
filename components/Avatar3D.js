@@ -14,14 +14,32 @@ try {
   ({ useGLTF } = require('@react-three/drei/native'));
 } catch (_) { /* 3D libs unavailable */ }
 
-function Model({ url, scale }) {
+function ItemModel({ url, scale }) {
+  const gltf = useGLTF(url);
+  return <primitive object={gltf.scene} scale={scale} />;
+}
+
+function Model({ url, scale, equippedItems = [] }) {
   const gltf = useGLTF(url);
   const ref = useRef();
   useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * 0.6; });
-  return <primitive ref={ref} object={gltf.scene} scale={scale} />;
+  return (
+    <group ref={ref}>
+      <primitive object={gltf.scene} scale={scale} />
+      {equippedItems.map((item, index) => {
+        const itemUrl = typeof item === 'string' ? item : (item?.glb || item?.glb_url || item?.model_url);
+        if (!itemUrl) return null;
+        return (
+          <Suspense key={`${itemUrl}-${index}`} fallback={null}>
+            <ItemModel url={itemUrl} scale={scale} />
+          </Suspense>
+        );
+      })}
+    </group>
+  );
 }
 
-export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
+export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220 }) {
   const [failed, setFailed] = useState(false);
 
   if (!url || !Canvas || !useGLTF) {
@@ -48,7 +66,7 @@ export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
         <directionalLight position={[-3, 2, -2]} intensity={0.5} />
         <Suspense fallback={null}>
           <ErrorGuard onError={() => setFailed(true)}>
-            <Model url={url} scale={scale} />
+            <Model url={url} scale={scale} equippedItems={equippedItems} />
           </ErrorGuard>
         </Suspense>
       </Canvas>

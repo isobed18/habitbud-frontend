@@ -4,7 +4,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
-export const BASE_URL = 'http://192.168.1.7:8000/';
+export const BASE_URL = 'http://192.168.1.8:8000/';
 
 export const getImageUrl = (url) => {
     if (!url) return null;

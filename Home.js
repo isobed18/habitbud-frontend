@@ -22,6 +22,7 @@ import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
 import EmptyState from './components/EmptyState';
+import Avatar from './components/Avatar';
 
 const getThemeColor = (indexOrKey) => {
   return getHabitColor(indexOrKey);
@@ -59,6 +60,7 @@ const toLocalDateString = (date) => {
 export default function Home({ navigation }) {
   const [habits, setHabits] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [profile, setProfile] = useState(null);
 
   // Calendar
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -76,13 +78,22 @@ export default function Home({ navigation }) {
   const [activeStats, setActiveStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
-  // XP Toast
+  const fetchProfile = async () => {
+    try {
+      const response = await axiosInstance.get('users/api/profile/');
+      setProfile(response.data);
+    } catch (e) {
+      console.log('Error fetching profile in Home:', e?.message);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchHabits();
+      fetchProfile();
     });
     fetchHabits();
+    fetchProfile();
     return unsubscribe;
   }, [navigation]);
 
@@ -403,9 +414,53 @@ export default function Home({ navigation }) {
     );
   };
 
+  const getLevelProgress = () => {
+    if (!profile) return 0;
+    const lvl = profile.level || 1;
+    const xp = profile.xp || 0;
+    const currentMin = 50 * Math.pow(lvl - 1, 2);
+    const nextMax = 50 * Math.pow(lvl, 2);
+    const progress = xp - currentMin;
+    const range = nextMax - currentMin;
+    if (range <= 0) return 0;
+    return Math.max(0, Math.min(1, progress / range));
+  };
+
+  const renderDopamineHeader = () => {
+    if (!profile) return null;
+    const highestStreak = habits.reduce((max, h) => Math.max(max, h.streak || 0), 0);
+    return (
+      <View style={styles.dopamineHeader}>
+        <Pressable onPress={() => navigation.navigate('Profile')} style={styles.dopamineAvatarBtn}>
+          <Avatar user={profile} size={44} />
+        </Pressable>
+        <View style={styles.dopamineCenter}>
+          <View style={styles.dopamineLevelRow}>
+            <Text style={styles.dopamineLevelText}>Seviye {profile.level || 1}</Text>
+            <Text style={styles.dopamineXpText}>{profile.xp || 0} XP</Text>
+          </View>
+          <View style={styles.dopamineProgressBarBg}>
+            <View style={[styles.dopamineProgressBarFill, { width: `${getLevelProgress() * 100}%` }]} />
+          </View>
+        </View>
+        <View style={styles.dopamineStatsRight}>
+          <View style={styles.dopamineStatBadge}>
+            <Text style={styles.dopamineStatEmoji}>🔥</Text>
+            <Text style={styles.dopamineStatVal}>{highestStreak}</Text>
+          </View>
+          <View style={styles.dopamineStatBadge}>
+            <Text style={styles.dopamineStatEmoji}>💎</Text>
+            <Text style={styles.dopamineStatVal}>{profile.points || 0}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
+        {renderDopamineHeader()}
         {renderCalendarStrip()}
         <View style={styles.listContainer}>
           <FlatList data={habits} keyExtractor={i => i.id.toString()} renderItem={renderHabitCard} scrollEnabled={false}
@@ -516,5 +571,73 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', marginBottom: 5, color: '#444' },
   btn: { padding: 15, borderRadius: 12, backgroundColor: '#eee', alignItems: 'center' },
   multiplierBadge: { marginTop: 4, backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
-  multiplierText: { fontSize: 10, fontWeight: 'bold', color: '#B46A00' }
+  multiplierText: { fontSize: 10, fontWeight: 'bold', color: '#B46A00' },
+  dopamineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+    gap: 12,
+  },
+  dopamineAvatarBtn: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  dopamineCenter: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  dopamineLevelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  dopamineLevelText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  dopamineXpText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  dopamineProgressBarBg: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f1f5f9',
+    overflow: 'hidden',
+  },
+  dopamineProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#10b981',
+    borderRadius: 4,
+  },
+  dopamineStatsRight: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dopamineStatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 3,
+  },
+  dopamineStatEmoji: {
+    fontSize: 14,
+  },
+  dopamineStatVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#334155',
+  },
 });

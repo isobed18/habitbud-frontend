@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
@@ -17,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { unwrapPagination } from './utils/api';
 import { reward, haptics } from './utils/feedback';
 import LevelUpModal from './components/LevelUpModal';
+import Avatar from './components/Avatar';
 
 export default function Chat({ route, navigation }) {
   const { conversationId } = route.params;
@@ -348,14 +351,21 @@ export default function Chat({ route, navigation }) {
     const isMyMessage = currentUserId && item.sender?.id === currentUserId;
     const canVerify = !isMyMessage && item.message_type === 'PROOF' && item.verification_status === 'PENDING';
 
-    return (
+    const prevMsg = index > 0 ? messages[index - 1] : null;
+    const isSameSender = prevMsg && prevMsg.sender?.id === item.sender?.id;
+    const isCloseTime = prevMsg && (new Date(item.created_at) - new Date(prevMsg.created_at)) < 120000;
+    const showAvatarAndName = !isMyMessage && (!isSameSender || !isCloseTime);
+
+    const messageBubble = (
       <View
         style={[
           styles.messageContainer,
           isMyMessage ? styles.myMessage : styles.otherMessage,
+          isMyMessage ? styles.myMessageRoundings : styles.otherMessageRoundings,
+          item.message_type === 'PROOF' && styles.proofBubble,
         ]}
       >
-        {!isMyMessage && (
+        {showAvatarAndName && conversation?.is_group && (
           <Text style={styles.senderName}>{item.sender?.username}</Text>
         )}
 
@@ -368,9 +378,18 @@ export default function Chat({ route, navigation }) {
                 resizeMode="cover"
               />
             )}
-            {item.content && <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>}
-            <View style={styles.proofStatusContainer}>
-              <Text style={[styles.proofStatus, isMyMessage && styles.myMessageText]}>
+            {item.content && (
+              <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+                {item.content}
+              </Text>
+            )}
+            <View style={[
+              styles.proofStatusContainer,
+              item.verification_status === 'VERIFIED' && styles.statusVerified,
+              item.verification_status === 'REJECTED' && styles.statusRejected,
+              item.verification_status === 'PENDING' && styles.statusPending,
+            ]}>
+              <Text style={styles.proofStatusText}>
                 {item.verification_status === 'VERIFIED' && '✓ Doğrulandı'}
                 {item.verification_status === 'REJECTED' && '✗ Reddedildi'}
                 {item.verification_status === 'PENDING' && '⏳ Beklemede'}
@@ -382,24 +401,49 @@ export default function Chat({ route, navigation }) {
                   style={[styles.verifyButton, styles.verifyAcceptButton]}
                   onPress={() => verifyProof(item.id, 'verify')}
                 >
-                  <Text style={styles.verifyButtonText}>✓ Doğrula</Text>
+                  <Ionicons name="checkmark-circle" size={14} color="#fff" />
+                  <Text style={styles.verifyButtonText}>Doğrula</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.verifyButton, styles.verifyRejectButton]}
                   onPress={() => verifyProof(item.id, 'reject')}
                 >
-                  <Text style={styles.verifyButtonText}>✗ Reddet</Text>
+                  <Ionicons name="close-circle" size={14} color="#fff" />
+                  <Text style={styles.verifyButtonText}>Reddet</Text>
                 </Pressable>
               </View>
             )}
           </View>
         ) : (
-          <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>
+          <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+            {item.content}
+          </Text>
         )}
 
         <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
           {formatTime(item.created_at)}
         </Text>
+      </View>
+    );
+
+    if (isMyMessage) {
+      return (
+        <View style={[styles.messageRow, { justifyContent: 'flex-end' }]}>
+          {messageBubble}
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.messageRow, { justifyContent: 'flex-start' }]}>
+        <View style={styles.avatarSpace}>
+          {showAvatarAndName ? (
+            <Pressable onPress={() => openProfile(item.sender?.id)}>
+              <Avatar user={item.sender} size={32} />
+            </Pressable>
+          ) : null}
+        </View>
+        {messageBubble}
       </View>
     );
   };
@@ -415,22 +459,24 @@ export default function Chat({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#333" />
         </Pressable>
         <Pressable style={styles.headerCenter} onPress={onHeaderPress}>
-          <View style={styles.headerAvatar}>
-            {conversation?.is_group ? (
+          {conversation?.is_group ? (
+            <View style={styles.headerAvatar}>
               <Ionicons name="people" size={20} color="#fff" />
-            ) : (
-              <Text style={styles.headerAvatarText}>
-                {(conversation?.display_name || otherUser?.username || '?').charAt(0).toUpperCase()}
-              </Text>
-            )}
-          </View>
+            </View>
+          ) : (
+            <Avatar user={otherUser} size={38} />
+          )}
           <View>
             <Text style={styles.headerTitle}>
               {conversation?.display_name || otherUser?.username || 'Sohbet'}
             </Text>
-            {conversation?.is_group && (
+            {conversation?.is_group ? (
               <Text style={styles.headerSubtitle}>
                 {conversation.participants?.length || 0} üye · üyeleri gör
+              </Text>
+            ) : (
+              <Text style={styles.headerSubtitle}>
+                Lvl {otherUser?.level || 1} · Seriyi Sürdür 🔥
               </Text>
             )}
           </View>
@@ -455,26 +501,28 @@ export default function Chat({ route, navigation }) {
       )}
 
       <View style={styles.inputContainer}>
-        <Pressable
-          style={styles.cameraBtn}
-          onPress={() => navigation.navigate('SubmitProof', { conversationId })}
-        >
-          <Ionicons name="camera" size={22} color="#667eea" />
-        </Pressable>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={handleInputChange}
-          placeholder="Mesaj yazın..."
-          multiline
-          maxLength={1000}
-        />
+        <View style={styles.inputWrapper}>
+          <Pressable
+            style={styles.cameraBtn}
+            onPress={() => navigation.navigate('SubmitProof', { conversationId })}
+          >
+            <Ionicons name="camera" size={22} color="#6366f1" />
+          </Pressable>
+          <TextInput
+            style={styles.input}
+            value={inputText}
+            onChangeText={handleInputChange}
+            placeholder="Mesaj yazın..."
+            multiline
+            maxLength={1000}
+          />
+        </View>
         <Pressable
           style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
           onPress={sendMessage}
           disabled={!inputText.trim()}
         >
-          <Ionicons name="send" size={20} color="#fff" />
+          <Ionicons name="send" size={18} color="#fff" />
         </Pressable>
       </View>
 
@@ -511,7 +559,7 @@ export default function Chat({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: '#f8fafc',
   },
   header: {
     flexDirection: 'row',
@@ -520,40 +568,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: 50,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
   },
   backBtn: {
-    padding: 4,
+    padding: 6,
   },
   headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#667eea',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#6366f1',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerAvatarText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: '#0f172a',
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#8b5cf6',
+    fontSize: 11,
+    color: '#6366f1',
     fontWeight: '600',
+    marginTop: 1,
   },
   membersOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   membersSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34 },
@@ -567,61 +616,128 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 12,
-    paddingBottom: 20,
+    paddingBottom: 24,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  avatarSpace: {
+    width: 32,
+    height: 32,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   messageContainer: {
-    maxWidth: '78%',
-    padding: 12,
-    borderRadius: 18,
-    marginBottom: 8,
+    maxWidth: '75%',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#667eea',
-    borderBottomRightRadius: 4,
+    backgroundColor: '#6366f1',
   },
   otherMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  myMessageRoundings: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 4,
+  },
+  otherMessageRoundings: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderBottomLeftRadius: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    borderBottomRightRadius: 18,
   },
   senderName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#667eea',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6366f1',
     marginBottom: 4,
   },
   messageText: {
     fontSize: 15,
-    color: '#333',
     lineHeight: 20,
   },
   myMessageText: {
-    color: '#fff',
+    color: '#ffffff',
+  },
+  otherMessageText: {
+    color: '#1e293b',
   },
   messageTime: {
-    fontSize: 10,
-    color: '#bbb',
+    fontSize: 9,
+    color: '#94a3b8',
     marginTop: 4,
     alignSelf: 'flex-end',
   },
   myMessageTime: {
     color: 'rgba(255,255,255,0.7)',
   },
+  proofBubble: {
+    width: 240,
+    padding: 8,
+    borderRadius: 20,
+  },
+  proofMessage: {
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  proofImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+  proofStatusContainer: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  proofStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  statusVerified: {
+    backgroundColor: '#10b981',
+  },
+  statusRejected: {
+    backgroundColor: '#ef4444',
+  },
+  statusPending: {
+    backgroundColor: '#f59e0b',
+  },
   verifyButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginTop: 10,
   },
   verifyButton: {
     flex: 1,
-    padding: 8,
-    borderRadius: 10,
+    flexDirection: 'row',
+    gap: 4,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   verifyAcceptButton: {
     backgroundColor: '#10b981',
@@ -630,78 +746,80 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
   },
   verifyButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  proofMessage: {
-    alignItems: 'center',
-  },
-  proofImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  proofStatusContainer: {
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 8,
-  },
-  proofStatus: {
+    color: '#ffffff',
     fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   typingIndicator: {
-    padding: 10,
-    paddingLeft: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginLeft: 44,
+    marginBottom: 8,
   },
   typingText: {
     fontSize: 12,
-    color: '#999',
+    color: '#64748b',
     fontStyle: 'italic',
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 10,
-    paddingBottom: 30,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    alignItems: 'flex-end',
+    padding: 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 2,
+    marginRight: 8,
   },
   cameraBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(103, 126, 234, 0.1)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    maxHeight: 100,
+    paddingHorizontal: 10,
     fontSize: 15,
-    marginRight: 8,
+    color: '#0f172a',
+    maxHeight: 80,
   },
   sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#667eea',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#6366f1',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#cbd5e1',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
 

@@ -16,14 +16,16 @@ export default function AvatarStudio({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState(defaultAvatarConfig());
   const [models3d, setModels3d] = useState(SAMPLE_MODELS);
+  const [inventory, setInventory] = useState([]);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
-      const [pr, mr] = await Promise.allSettled([
+      const [pr, mr, ir] = await Promise.allSettled([
         axiosInstance.get('users/api/profile/'),
         axiosInstance.get('users/api/avatar-models/'),
+        axiosInstance.get('items/'),
       ]);
       if (pr.status === 'fulfilled') {
         const cfg = parseAvatarConfig(pr.value.data.avatar_config, pr.value.data.username) || defaultAvatarConfig(pr.value.data.username);
@@ -38,6 +40,9 @@ export default function AvatarStudio({ navigation }) {
           url: a.glb || a.glb_url,
           scale: a.scale || 1.0,
         })).filter((m) => m.url));
+      }
+      if (ir.status === 'fulfilled' && Array.isArray(ir.value.data)) {
+        setInventory(ir.value.data);
       }
     } catch (_) {
       setConfig(defaultAvatarConfig());
@@ -72,7 +77,12 @@ export default function AvatarStudio({ navigation }) {
   };
 
   const is3d = config.provider === '3d';
-  const dressable = !is3d && config.style === 'avataaars';
+  const dressable = is3d
+    ? inventory.some((item) => item.model_glb || item.model_url)
+    : config.style === 'avataaars';
+  const equippedGlbs = is3d
+    ? (config.items || []).map((id) => inventory.find((item) => item.id === id)).filter(Boolean).map((item) => item.model_glb || item.model_url).filter(Boolean)
+    : [];
   const previewUri = buildAvatarUrl(config);
 
   const setMode = (mode) => {
@@ -118,7 +128,7 @@ export default function AvatarStudio({ navigation }) {
         {/* Preview */}
         {is3d ? (
           <View style={styles.previewBox}>
-            <Avatar3D url={config.model_url} scale={config.model_scale || 0.045} height={240} style={{ width: '100%', borderRadius: 16, backgroundColor: '#eef2ff' }} />
+            <Avatar3D url={config.model_url} scale={config.model_scale || 0.045} equippedItems={equippedGlbs} height={240} style={{ width: '100%', borderRadius: 16, backgroundColor: '#eef2ff' }} />
           </View>
         ) : (
           <View style={styles.previewBox}>
@@ -170,22 +180,32 @@ export default function AvatarStudio({ navigation }) {
         )}
 
         {/* Dress-up */}
-        {!is3d && <Text style={styles.section}>Kıyafet & Aksesuar</Text>}
-        {!is3d && (dressable ? (
+        {dressable && <Text style={styles.section}>Kıyafet & Aksesuar</Text>}
+        {dressable && (
           <View style={styles.chipWrap}>
-            {DRESS_ITEMS.map((it) => {
-              const active = (config.items || []).includes(it.slug);
-              return (
-                <Pressable key={it.slug} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.slug)}>
-                  <Text style={styles.itemEmoji}>{it.emoji}</Text>
-                  <Text style={[styles.itemLabel, active && { color: '#fff' }]}>{it.label}</Text>
-                </Pressable>
-              );
-            })}
+            {is3d ? (
+              inventory.filter((item) => item.model_glb || item.model_url).map((it) => {
+                const active = (config.items || []).includes(it.id);
+                return (
+                  <Pressable key={it.id} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.id)}>
+                    <Text style={styles.itemEmoji}>🎒</Text>
+                    <Text style={[styles.itemLabel, active && { color: '#fff' }]}>{it.name}</Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              DRESS_ITEMS.map((it) => {
+                const active = (config.items || []).includes(it.slug);
+                return (
+                  <Pressable key={it.slug} style={[styles.itemCard, active && styles.itemCardActive]} onPress={() => toggleItem(it.slug)}>
+                    <Text style={styles.itemEmoji}>{it.emoji}</Text>
+                    <Text style={[styles.itemLabel, active && { color: '#fff' }]}>{it.label}</Text>
+                  </Pressable>
+                );
+              })
+            )}
           </View>
-        ) : (
-          <Text style={styles.hint}>Kıyafet/aksesuar yalnızca "Karakter" stilinde takılır.</Text>
-        ))}
+        )}
 
         <Pressable style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Kaydet</Text>}

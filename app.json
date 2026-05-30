@@ -31,6 +31,9 @@
         "projectId": "78a11ba5-d912-498c-bfb5-8ca37b96c1f4"
       }
     },
-    "owner": "isobed18"
+    "owner": "isobed18",
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
