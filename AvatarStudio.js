@@ -25,7 +25,7 @@ export default function AvatarStudio({ navigation }) {
       const [pr, mr, ir] = await Promise.allSettled([
         axiosInstance.get('users/api/profile/'),
         axiosInstance.get('users/api/avatar-models/'),
-        axiosInstance.get('items/'),
+        axiosInstance.get('users/items/'),
       ]);
 
       let models = SAMPLE_MODELS;
