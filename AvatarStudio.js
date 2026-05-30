@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert,
+  View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -98,15 +98,21 @@ export default function AvatarStudio({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        {/* 3D preview (drag to rotate) with a fullscreen expand button */}
+        {/* 2D preview of the selected character; 3D opens on demand (fast). */}
         <View style={styles.previewBox}>
-          <Avatar3D url={config.model_url} scale={config.model_scale || 1.2} height={260}
-                    style={{ width: '100%', borderRadius: 18, backgroundColor: '#eef2ff' }} />
+          {config.model_thumb ? (
+            <Image source={{ uri: getImageUrl(config.model_thumb) }} style={styles.previewImg} resizeMode="cover" />
+          ) : (
+            <View style={[styles.previewImg, { alignItems: 'center', justifyContent: 'center' }]}>
+              <Ionicons name="cube-outline" size={48} color="#c4b5fd" />
+            </View>
+          )}
           <Pressable style={styles.expandBtn} onPress={() => setViewer(true)}>
             <Ionicons name="scan" size={18} color="#fff" />
+            <Text style={styles.expandText}>3B</Text>
           </Pressable>
         </View>
-        <Text style={styles.dragHint}>Döndürmek için sürükle · büyütmek için ⛶</Text>
+        <Text style={styles.dragHint}>3B'de incelemek için ⛶ butonuna dokun</Text>
 
         <Text style={styles.section}>Karakter</Text>
         <View style={styles.chipWrap}>
@@ -153,8 +159,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
 
-  previewBox: { marginBottom: 6, position: 'relative' },
-  expandBtn: { position: 'absolute', right: 12, bottom: 12, backgroundColor: '#0891b2', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  previewBox: { marginBottom: 6, position: 'relative', alignItems: 'center' },
+  previewImg: { width: 220, height: 220, borderRadius: 18, backgroundColor: '#eef2ff' },
+  expandBtn: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', backgroundColor: '#0891b2', paddingHorizontal: 14, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  expandText: { color: '#fff', fontWeight: '700', marginLeft: 6 },
   dragHint: { textAlign: 'center', color: '#999', fontSize: 12, marginBottom: 10 },
 
   section: { fontSize: 15, fontWeight: '800', color: '#333', marginTop: 18, marginBottom: 10 },
