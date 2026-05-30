@@ -26,10 +26,13 @@ export default function Chat({ route, navigation }) {
   const [typingUser, setTypingUser] = useState(null);
   const [otherUser, setOtherUser] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [conversation, setConversation] = useState(null);
+  const [membersVisible, setMembersVisible] = useState(false);
   const [wsEnabled, setWsEnabled] = useState(true);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const flatListRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
+  const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
   const MAX_RECONNECT_ATTEMPTS = 3;
 
@@ -45,6 +48,29 @@ export default function Chat({ route, navigation }) {
     } catch (error) {
       console.error('Error fetching current user:', error);
     }
+  };
+
+  const fetchConversation = async () => {
+    try {
+      const r = await axiosInstance.get(`chat/conversations/${conversationId}/`);
+      setConversation(r.data);
+      if (!r.data.is_group && r.data.participants && currentUserId) {
+        const other = r.data.participants.find((p) => p.id !== currentUserId);
+        if (other) setOtherUser(other);
+      }
+    } catch (e) { /* silent */ }
+  };
+
+  const openProfile = (userId) => {
+    if (!userId || userId === currentUserId) return;
+    haptics.selection();
+    setMembersVisible(false);
+    navigation.navigate('FriendProfile', { userId });
+  };
+
+  const onHeaderPress = () => {
+    if (conversation?.is_group) setMembersVisible(true);
+    else if (otherUser) openProfile(otherUser.id);
   };
 
   const fetchMessages = async () => {
@@ -116,17 +142,22 @@ export default function Chat({ route, navigation }) {
             setMessages((prev) => [...prev, data.message]);
             scrollToBottom();
           } else if (data.type === 'typing') {
+            // Ignore our own echoed typing events.
+            if (data.user_id && currentUserId && data.user_id === currentUserId) return;
             setTypingUser(data.username);
-            setIsTyping(data.is_typing);
+            setIsTyping(!!data.is_typing);
 
-            // Clear typing indicator after 3 seconds
-            if (typingTimeoutRef.current) {
-              clearTimeout(typingTimeoutRef.current);
-            }
-            typingTimeoutRef.current = setTimeout(() => {
+            // Auto-hide the other user's indicator (separate ref from outgoing).
+            if (incomingTypingRef.current) clearTimeout(incomingTypingRef.current);
+            if (data.is_typing) {
+              incomingTypingRef.current = setTimeout(() => {
+                setIsTyping(false);
+                setTypingUser(null);
+              }, 4000);
+            } else {
               setIsTyping(false);
               setTypingUser(null);
-            }, 3000);
+            }
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -272,6 +303,7 @@ export default function Chat({ route, navigation }) {
 
   useEffect(() => {
     if (currentUserId) {
+      fetchConversation();
       fetchMessages();
     }
   }, [currentUserId, conversationId]);
@@ -374,16 +406,27 @@ export default function Chat({ route, navigation }) {
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </Pressable>
-        <View style={styles.headerCenter}>
-          {otherUser && (
-            <View style={styles.headerAvatar}>
-              <Text style={styles.headerAvatarText}>{otherUser.username.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-          <Text style={styles.headerTitle}>
-            {otherUser ? otherUser.username : 'Sohbet'}
-          </Text>
-        </View>
+        <Pressable style={styles.headerCenter} onPress={onHeaderPress}>
+          <View style={styles.headerAvatar}>
+            {conversation?.is_group ? (
+              <Ionicons name="people" size={20} color="#fff" />
+            ) : (
+              <Text style={styles.headerAvatarText}>
+                {(conversation?.display_name || otherUser?.username || '?').charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>
+              {conversation?.display_name || otherUser?.username || 'Sohbet'}
+            </Text>
+            {conversation?.is_group && (
+              <Text style={styles.headerSubtitle}>
+                {conversation.participants?.length || 0} üye · üyeleri gör
+              </Text>
+            )}
+          </View>
+        </Pressable>
         <View style={{ width: 40 }} />
       </View>
 
@@ -426,6 +469,32 @@ export default function Chat({ route, navigation }) {
           <Ionicons name="send" size={20} color="#fff" />
         </Pressable>
       </View>
+
+      {/* Group members */}
+      <Modal visible={membersVisible} animationType="slide" transparent onRequestClose={() => setMembersVisible(false)}>
+        <View style={styles.membersOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={() => setMembersVisible(false)} />
+          <View style={styles.membersSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.membersTitle}>
+              {conversation?.display_name || 'Grup'} · {conversation?.participants?.length || 0} üye
+            </Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {(conversation?.participants || []).map((p) => (
+                <Pressable key={p.id} style={styles.memberRow} onPress={() => openProfile(p.id)}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{p.username.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.memberName}>
+                    {p.username}{p.id === currentUserId ? ' (sen)' : ''}
+                  </Text>
+                  {p.id !== currentUserId && <Ionicons name="chevron-forward" size={18} color="#bbb" />}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -472,6 +541,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#333',
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#8b5cf6',
+    fontWeight: '600',
+  },
+  membersOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  membersSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', alignSelf: 'center', marginBottom: 12 },
+  membersTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  memberAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#667eea', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  memberName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
   messagesList: {
     flex: 1,
   },
