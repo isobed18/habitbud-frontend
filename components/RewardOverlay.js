@@ -44,6 +44,11 @@ export default function RewardOverlay() {
   useEffect(() => {
     const unsub = rewardBus.subscribe((event) => {
       const xp = event.xp || 0;
+      // A "big" event always celebrates with confetti (level-up, avatar saved…).
+      if (event.big) setBurst((b) => b + 1);
+      // But only show the "+N XP" chip/total for actions that actually earn XP.
+      if (xp <= 0) return;
+
       const id = ++_id;
       const chip = {
         id,
@@ -55,7 +60,6 @@ export default function RewardOverlay() {
         scale: new Animated.Value(0.6),
       };
       setChips((prev) => [...prev, chip]);
-      if (event.big) setBurst((b) => b + 1);
 
       Animated.sequence([
         Animated.parallel([
