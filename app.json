@@ -25,6 +25,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "78a11ba5-d912-498c-bfb5-8ca37b96c1f4"
+      }
+    },
+    "owner": "isobed18"
   }
 }
