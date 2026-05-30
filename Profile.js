@@ -225,6 +225,9 @@ const ProfilePage = ({ navigation }) => {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
         <Text style={styles.pageTitle}>Profil</Text>
         <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPress={() => navigation.navigate('Settings')} style={{ padding: 4 }}>
+            <Ionicons name="settings-outline" size={24} color="#333" />
+          </Pressable>
           <Pressable onPress={() => navigation.navigate('Achievements')} style={{ padding: 4 }}>
             <Ionicons name="ribbon-outline" size={24} color="#333" />
           </Pressable>

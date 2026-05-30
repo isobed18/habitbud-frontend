@@ -22,6 +22,9 @@ import Challenges from './Challenges';
 import AddHabit from './AddHabit';
 import Notifications from './Notifications';
 import Achievements from './Achievements';
+import Search from './Search';
+import Settings from './Settings';
+import { PreferencesProvider } from './utils/preferences';
 
 // Utils & Services
 import { getAccessToken } from './utils/auth';
@@ -161,6 +164,7 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <PreferencesProvider>
       <SafeAreaProvider>
         <NavigationContainer ref={navigationRef}>
           <Stack.Navigator
@@ -189,6 +193,8 @@ export default function App() {
             <Stack.Screen name="Notifications" component={Notifications} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Achievements" component={Achievements} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Leaderboard" component={Leaderboard} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Search" component={Search} options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="Settings" component={Settings} options={{ animation: 'slide_from_right' }} />
 
             <Stack.Screen
               name="AddHabitModal"
@@ -202,6 +208,7 @@ export default function App() {
         </NavigationContainer>
         <RewardOverlay />
       </SafeAreaProvider>
+      </PreferencesProvider>
     </GestureHandlerRootView>
   );
 }

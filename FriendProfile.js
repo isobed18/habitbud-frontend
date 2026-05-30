@@ -58,6 +58,36 @@ export default function FriendProfile({ route, navigation }) {
         );
     };
 
+    const blockUser = () => {
+        Alert.alert(
+            'Engelle',
+            `${friendData?.username || 'Bu kullanıcı'} engellensin mi? Arkadaşlığınız da kaldırılır.`,
+            [
+                { text: 'Vazgeç', style: 'cancel' },
+                {
+                    text: 'Engelle', style: 'destructive', onPress: async () => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        try {
+                            await axiosInstance.post(`users/api/blocks/${userId}/`);
+                            Alert.alert('Engellendi', 'Kullanıcı engellendi.');
+                            navigation.goBack();
+                        } catch (error) {
+                            Alert.alert('Hata', 'Engellenemedi.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const openMenu = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Alert.alert('Seçenekler', null, [
+            { text: 'Engelle', style: 'destructive', onPress: blockUser },
+            { text: 'Vazgeç', style: 'cancel' },
+        ]);
+    };
+
     const renderHabitItem = ({ item }) => {
         const theme = getHabitColor(item.color || item.id);
         return (
@@ -102,7 +132,9 @@ export default function FriendProfile({ route, navigation }) {
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </Pressable>
                 <Text style={styles.headerTitle}>Arkadaş Profili</Text>
-                <View style={{ width: 40 }} />
+                <Pressable onPress={openMenu} style={styles.backBtn}>
+                    <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+                </Pressable>
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 20 }}>

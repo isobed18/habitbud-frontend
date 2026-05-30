@@ -254,10 +254,15 @@ export default function Conversations({ navigation }) {
     <View style={styles.container}>
       <View style={{ padding: 20, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={styles.title}>Sohbetler</Text>
-        <Pressable style={styles.newRoomBtn} onPress={openRoomModal}>
-          <Ionicons name="people" size={18} color="#fff" />
-          <Text style={styles.newRoomBtnText}>Oda</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable style={styles.searchIconBtn} onPress={() => navigation.navigate('Search')}>
+            <Ionicons name="search" size={20} color="#333" />
+          </Pressable>
+          <Pressable style={styles.newRoomBtn} onPress={openRoomModal}>
+            <Ionicons name="people" size={18} color="#fff" />
+            <Text style={styles.newRoomBtnText}>Oda</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Stories Strip */}
@@ -484,6 +489,7 @@ const styles = StyleSheet.create({
   likeCount: { color: '#fff', fontWeight: 'bold', marginTop: 4, fontSize: 14 },
 
   // Group room
+  searchIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
   newRoomBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ff7f50', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 6 },
   newRoomBtnText: { color: '#fff', fontWeight: 'bold' },
   roomModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
