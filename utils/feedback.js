@@ -55,14 +55,14 @@ export const rewardBus = {
   },
 };
 
-/**
- * Fire a reward: bumps the global XP overlay and plays a haptic.
- * @param {number} xp   XP gained (drives the flying "+X XP" + running total)
- * @param {object} opts { type, label, big } — type: 'xp'|'streak'|'level',
- *                       big triggers a stronger celebration.
- */
 export function reward(xp, opts = {}) {
   if (opts.big) haptics.celebrate();
   else haptics.success();
-  rewardBus.emit({ xp: xp || 0, type: opts.type || 'xp', label: opts.label, big: !!opts.big });
+  rewardBus.emit({ 
+    xp: xp || 0, 
+    diamonds: opts.diamonds || 0, 
+    type: opts.type || 'xp', 
+    label: opts.label, 
+    big: !!opts.big 
+  });
 }

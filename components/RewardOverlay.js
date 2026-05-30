@@ -44,15 +44,17 @@ export default function RewardOverlay() {
   useEffect(() => {
     const unsub = rewardBus.subscribe((event) => {
       const xp = event.xp || 0;
-      // A "big" event always celebrates with confetti (level-up, avatar saved…).
-      if (event.big && xp > 0) setBurst((b) => b + 1);
-      // But only show the "+N XP" chip/total for actions that actually earn XP.
-      if (xp <= 0) return;
+      const diamonds = event.diamonds || 0;
+      // A "big" event always celebrates with confetti.
+      if (event.big && (xp > 0 || diamonds > 0)) setBurst((b) => b + 1);
+      // Show chip if either XP or diamonds are earned.
+      if (xp <= 0 && diamonds <= 0) return;
 
       const id = ++_id;
       const chip = {
         id,
         xp,
+        diamonds,
         label: event.label,
         big: event.big,
         translateY: new Animated.Value(0),
@@ -81,6 +83,14 @@ export default function RewardOverlay() {
     return unsub;
   }, [showBadge]);
 
+  const getChipText = (c) => {
+    const parts = [];
+    if (c.xp > 0) parts.push(`+${c.xp} XP`);
+    if (c.diamonds > 0) parts.push(`+${c.diamonds} 💎`);
+    if (c.label) parts.push(c.label);
+    return parts.join(' · ');
+  };
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Celebration play={burst} lottieSource={require('../assets/lottie/confetti.json')} />
@@ -95,7 +105,7 @@ export default function RewardOverlay() {
               { opacity: c.opacity, transform: [{ translateY: c.translateY }, { scale: c.scale }] },
             ]}
           >
-            <Text style={styles.chipText}>+{c.xp} XP{c.label ? ` · ${c.label}` : ''}</Text>
+            <Text style={styles.chipText}>{getChipText(c)}</Text>
           </Animated.View>
         ))}
       </View>

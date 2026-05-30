@@ -7,6 +7,7 @@
 
 import React, { Suspense, useRef, useState } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { getImageUrl } from '../services/axiosInstance';
 
 let Canvas, useFrame, useGLTF;
 try {
@@ -15,12 +16,14 @@ try {
 } catch (_) { /* 3D libs unavailable */ }
 
 function ItemModel({ url, scale }) {
-  const gltf = useGLTF(url);
+  const absoluteUrl = getImageUrl(url);
+  const gltf = useGLTF(absoluteUrl);
   return <primitive object={gltf.scene} scale={scale} />;
 }
 
 function Model({ url, scale, equippedItems = [] }) {
-  const gltf = useGLTF(url);
+  const absoluteUrl = getImageUrl(url);
+  const gltf = useGLTF(absoluteUrl);
   const ref = useRef();
   useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * 0.6; });
   return (

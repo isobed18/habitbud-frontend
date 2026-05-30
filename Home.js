@@ -77,6 +77,8 @@ export default function Home({ navigation }) {
   const [statsModalVisible, setStatsModalVisible] = useState(false);
   const [activeStats, setActiveStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [buyingFreeze, setBuyingFreeze] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -370,9 +372,7 @@ export default function Home({ navigation }) {
                     console.log('Current streak before refresh:', item.streak);
 
                     if (newCount >= item.target_count) {
-                      // Self-completion = flat reward; the big multiplied XP
-                      // comes when a friend approves your check.
-                      reward(5, { label: 'Tamamlandı' });
+                      reward(5, { label: 'Tamamlandı', big: true });
                       Alert.alert('Tebrikler! 🎉', 'Hedefine ulaştın! Şimdi check gönder, arkadaşların onaylasın 🔥', [
                         { text: 'Sonra', style: 'cancel' },
                         { text: 'Check Gönder', onPress: () => navigation.navigate('SubmitProof', { habitId: item.id }) },
@@ -426,6 +426,86 @@ export default function Home({ navigation }) {
     return Math.max(0, Math.min(1, progress / range));
   };
 
+  const handleBuyFreeze = async () => {
+    if (buyingFreeze) return;
+    setBuyingFreeze(true);
+    try {
+      const response = await axiosInstance.post('users/api/buy-freeze/');
+      setProfile(prev => ({
+        ...prev,
+        points: response.data.points,
+        streak_freezes: response.data.streak_freezes
+      }));
+      reward(0, { big: true }); // trigger Confetti Lottie!
+      Alert.alert('Başarılı! 🎉', response.data.message);
+    } catch (err) {
+      haptics.error();
+      const errMsg = err?.response?.data?.error || 'Satın alma işlemi gerçekleştirilemedi.';
+      Alert.alert('Hata 💎', errMsg);
+    } finally {
+      setBuyingFreeze(false);
+    }
+  };
+
+  const renderShopModal = () => (
+    <Modal visible={showShopModal} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { backgroundColor: '#1e293b', paddingVertical: 30 }]}>
+          <Text style={[styles.modalHeader, { color: '#fff', fontSize: 22, fontWeight: '900', marginBottom: 10 }]}>Alışkanlık Mağazası 💎</Text>
+          <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 20, fontSize: 13 }}>Elmaslarını harcayarak serini koru!</Text>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#0f172a', padding: 15, borderRadius: 16, marginBottom: 25 }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 24 }}>💎</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, marginTop: 4 }}>{profile?.points || 0}</Text>
+              <Text style={{ color: '#64748b', fontSize: 11 }}>Elmas</Text>
+            </View>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 24 }}>❄️</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, marginTop: 4 }}>{profile?.streak_freezes || 0}</Text>
+              <Text style={{ color: '#64748b', fontSize: 11 }}>Dondurucu</Text>
+            </View>
+          </View>
+
+          {/* Item Card */}
+          <View style={{ backgroundColor: '#334155', borderRadius: 16, padding: 15, marginBottom: 25, borderWidth: 1, borderColor: '#475569' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#38bdf8', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 24 }}>❄️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Seri Dondurucu</Text>
+                <Text style={{ color: '#38bdf8', fontWeight: '800', fontSize: 11, marginTop: 1 }}>STORE ITEM · Sınırsız</Text>
+              </View>
+            </View>
+            <Text style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginBottom: 15 }}>
+              Günün check-in işlemini yapmayı unuttuğunda serini bozulmaktan korur. Otomatik olarak kullanılır.
+            </Text>
+            <Pressable 
+              style={({ pressed }) => [
+                { 
+                  backgroundColor: '#38bdf8', 
+                  paddingVertical: 12, 
+                  borderRadius: 12, 
+                  alignItems: 'center',
+                  opacity: (pressed || buyingFreeze) ? 0.7 : 1
+                }
+              ]} 
+              onPress={handleBuyFreeze}
+              disabled={buyingFreeze}
+            >
+              <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 14 }}>20 💎 Satın Al</Text>
+            </Pressable>
+          </View>
+
+          <Pressable onPress={() => setShowShopModal(false)} style={{ alignItems: 'center', marginTop: 10 }}>
+            <Text style={{ color: '#94a3b8', fontWeight: '700', fontSize: 14 }}>Kapat</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const renderDopamineHeader = () => {
     if (!profile) return null;
     const highestStreak = habits.reduce((max, h) => Math.max(max, h.streak || 0), 0);
@@ -448,10 +528,14 @@ export default function Home({ navigation }) {
             <Text style={styles.dopamineStatEmoji}>🔥</Text>
             <Text style={styles.dopamineStatVal}>{highestStreak}</Text>
           </View>
-          <View style={styles.dopamineStatBadge}>
+          <Pressable style={styles.dopamineStatBadge} onPress={() => setShowShopModal(true)}>
+            <Text style={styles.dopamineStatEmoji}>❄️</Text>
+            <Text style={styles.dopamineStatVal}>{profile.streak_freezes || 0}</Text>
+          </Pressable>
+          <Pressable style={styles.dopamineStatBadge} onPress={() => setShowShopModal(true)}>
             <Text style={styles.dopamineStatEmoji}>💎</Text>
             <Text style={styles.dopamineStatVal}>{profile.points || 0}</Text>
-          </View>
+          </Pressable>
         </View>
       </View>
     );
@@ -459,6 +543,7 @@ export default function Home({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {renderShopModal()}
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderDopamineHeader()}
         {renderCalendarStrip()}
