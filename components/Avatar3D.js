@@ -1,8 +1,8 @@
-// Avatar3D — smooth, inertial drag-to-rotate GLB viewer (react-three-fiber +
-// expo-gl). Isolated/optional: if 3D fails, the 2D <Avatar/> still works.
+// Avatar3D — smooth inertial drag-to-rotate GLB viewer (r3f + expo-gl) with
+// approximate anchor-based item attachment (non-rigged MVP). Isolated/optional.
 //
-// Perf: GLBs cached to disk (download once). Lighting: Hunyuan GLBs are
-// metallic=1 with no normals -> dark; forced matte + recomputed normals here.
+// Perf: GLBs cached to disk. Lighting: Hunyuan GLBs are metallic=1 w/o normals
+// -> dark; forced matte + recomputed normals.
 
 import React, { Suspense, useRef, useState, useMemo, useEffect } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet, PanResponder } from 'react-native';
@@ -14,6 +14,16 @@ try {
   ({ Canvas, useFrame } = require('@react-three/fiber/native'));
   ({ useGLTF } = require('@react-three/drei/native'));
 } catch (_) { /* 3D libs unavailable */ }
+
+// Approximate attach points in the avatar's local space (model ~2 units tall).
+const ANCHOR = {
+  head: [0, 1.05, 0.15],
+  face: [0, 0.68, 0.6],
+  hand: [0.7, 0.05, 0.4],
+  back: [0, 0.45, -0.55],
+  neck: [0, 0.5, 0.4],
+  none: [0, 0, 0],
+};
 
 function useCachedGlb(remoteUrl) {
   const [uri, setUri] = useState(null);
@@ -55,7 +65,21 @@ function plushify(scene) {
   return scene;
 }
 
-function Model({ localUri, scale, rot }) {
+// One equipped item GLB, positioned at its anchor.
+function ItemGLTF({ localUri, anchor, scale }) {
+  const gltf = useGLTF(localUri);
+  const scene = useMemo(() => plushify(gltf.scene.clone()), [gltf.scene]);
+  const pos = ANCHOR[anchor] || ANCHOR.none;
+  return <primitive object={scene} position={pos} scale={scale} />;
+}
+
+function ItemMesh({ item, baseScale }) {
+  const local = useCachedGlb(item.url);
+  if (!local) return null;
+  return <ItemGLTF localUri={local} anchor={item.anchor} scale={(item.scale || 0.4) * baseScale} />;
+}
+
+function Model({ localUri, scale, rot, equippedItems }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
   const ref = useRef();
@@ -63,25 +87,27 @@ function Model({ localUri, scale, rot }) {
   useFrame(() => {
     if (!ref.current) return;
     const r = rot.current;
-    // Momentum when not actively dragging.
-    if (!r.dragging) {
-      r.y += r.vy;
-      r.vy *= 0.94;
-      if (Math.abs(r.vy) < 0.0004) r.vy = 0;
-    }
-    // Smoothly ease the rendered rotation toward the target.
+    if (!r.dragging) { r.y += r.vy; r.vy *= 0.94; if (Math.abs(r.vy) < 0.0004) r.vy = 0; }
     cur.current.y += (r.y - cur.current.y) * 0.18;
     cur.current.x += (r.x - cur.current.x) * 0.18;
     ref.current.rotation.y = cur.current.y;
     ref.current.rotation.x = cur.current.x;
   });
-  return <primitive ref={ref} object={scene} scale={scale} />;
+  return (
+    <group ref={ref}>
+      <primitive object={scene} scale={scale} />
+      {(equippedItems || []).map((it, i) => (
+        <Suspense key={`${it.url}-${i}`} fallback={null}>
+          <ItemMesh item={it} baseScale={scale} />
+        </Suspense>
+      ))}
+    </group>
+  );
 }
 
-export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
+export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220 }) {
   const [failed, setFailed] = useState(false);
   const localUri = useCachedGlb(url);
-  // y/x = target rotation, vy = inertia, lastDx = per-move delta tracker.
   const rot = useRef({ y: 0, x: 0, vy: 0, lastDx: 0, dragging: false });
 
   const pan = useMemo(() => PanResponder.create({
@@ -89,14 +115,14 @@ export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => { rot.current.dragging = true; rot.current.vy = 0; rot.current.lastDx = 0; },
     onPanResponderMove: (_e, g) => {
-      const dy = g.dx - rot.current.lastDx;     // per-move horizontal delta
+      const dy = g.dx - rot.current.lastDx;
       rot.current.lastDx = g.dx;
-      rot.current.y += dy * 0.007;               // lower sensitivity = calmer
+      rot.current.y += dy * 0.007;
       rot.current.x = Math.max(-0.5, Math.min(0.5, rot.current.x + (g.vy || 0) * 0.02));
     },
     onPanResponderRelease: (_e, g) => {
       rot.current.dragging = false;
-      rot.current.vy = Math.max(-0.25, Math.min(0.25, (g.vx || 0) * 0.12)); // fling inertia
+      rot.current.vy = Math.max(-0.25, Math.min(0.25, (g.vx || 0) * 0.12));
     },
     onPanResponderTerminate: () => { rot.current.dragging = false; },
   }), []);
@@ -121,7 +147,7 @@ export default function Avatar3D({ url, scale = 0.04, style, height = 220 }) {
         <directionalLight position={[0, -3, 2]} intensity={0.4} />
         <Suspense fallback={null}>
           <ErrorGuard onError={() => setFailed(true)}>
-            <Model localUri={localUri} scale={scale} rot={rot} />
+            <Model localUri={localUri} scale={scale} rot={rot} equippedItems={equippedItems} />
           </ErrorGuard>
         </Suspense>
       </Canvas>

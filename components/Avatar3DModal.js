@@ -13,14 +13,14 @@ import Avatar3D from './Avatar3D';
 
 const { height: H } = Dimensions.get('window');
 
-export default function Avatar3DModal({ visible, url, scale = 1.2, onClose }) {
+export default function Avatar3DModal({ visible, url, scale = 1.2, equippedItems = [], onClose }) {
   if (!visible) return null;
   return (
     <View style={styles.overlay}>
       <Pressable style={styles.close} onPress={onClose}>
         <Ionicons name="close" size={28} color="#fff" />
       </Pressable>
-      <Avatar3D url={url} scale={scale} height={H * 0.7} style={{ width: '100%' }} />
+      <Avatar3D url={url} scale={scale} equippedItems={equippedItems} height={H * 0.7} style={{ width: '100%' }} />
       <Text style={styles.hint}>Döndürmek için sürükle</Text>
     </View>
   );

@@ -78,10 +78,10 @@ export default function AvatarStudio({ navigation }) {
   };
 
   const dressItems = inventory.filter((it) => it.model_glb || it.model_url);
-  const equippedGlbs = (config.items || [])
+  const equippedItems = (config.items || [])
     .map((id) => dressItems.find((it) => it.id === id))
     .filter(Boolean)
-    .map((it) => it.model_glb || it.model_url);
+    .map((it) => ({ url: it.model_glb || it.model_url, anchor: it.anchor || 'head', scale: it.item_scale || 0.45 }));
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8b5cf6" /></View>;
@@ -148,7 +148,7 @@ export default function AvatarStudio({ navigation }) {
         </Pressable>
       </ScrollView>
 
-      <Avatar3DModal visible={viewer} url={config.model_url} scale={config.model_scale || 1.2} onClose={() => setViewer(false)} />
+      <Avatar3DModal visible={viewer} url={config.model_url} scale={config.model_scale || 1.2} equippedItems={equippedItems} onClose={() => setViewer(false)} />
     </SafeAreaView>
   );
 }
