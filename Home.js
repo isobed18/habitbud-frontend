@@ -455,6 +455,14 @@ export default function Home({ navigation }) {
       isDuoOrGroup = true;
     }
 
+    let myPendingLeaveAt = null;
+    if (matchedGroup && matchedGroup.memberships && profile) {
+      const myMembership = matchedGroup.memberships.find(m => m.user && m.user.id === profile.id);
+      if (myMembership) {
+        myPendingLeaveAt = myMembership.pending_leave_at;
+      }
+    }
+
     const isCompleted = (item.habit_type === 'count' && displayCount >= item.target_count) ||
       (item.habit_type === 'time' && displayTime >= item.target_time);
 
@@ -495,7 +503,21 @@ export default function Home({ navigation }) {
                 )}
               </View>
               {habitSubText ? (
-                <Text style={{ fontSize: 12, color: theme.text, opacity: 0.7, fontWeight: '700', marginBottom: 2 }}>{habitSubText}</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Text style={{ fontSize: 12, color: theme.text, opacity: 0.7, fontWeight: '700' }}>{habitSubText}</Text>
+                  {matchedGroup?.adaptation_mode_active && (
+                    <View style={styles.adaptationBadge}>
+                      <Ionicons name="snow" size={10} color="#0284c7" style={{ marginRight: 2 }} />
+                      <Text style={styles.adaptationBadgeText}>Adaptasyon Modu ❄️</Text>
+                    </View>
+                  )}
+                  {myPendingLeaveAt && (
+                    <View style={styles.leavePendingBadge}>
+                      <Ionicons name="exit" size={10} color="#b91c1c" style={{ marginRight: 2 }} />
+                      <Text style={styles.leavePendingBadgeText}>Ayrılma Bekliyor (24s)</Text>
+                    </View>
+                  )}
+                </View>
               ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {displayStreak > 0 ? (
@@ -504,6 +526,9 @@ export default function Home({ navigation }) {
                   <Ionicons name="flame-outline" size={16} color="#cbd5e1" style={{ marginRight: 4 }} />
                 )}
                 <Text style={{ fontWeight: 'bold', color: theme.text, marginRight: 10 }}>{displayStreak} gün</Text>
+                {matchedGroup?.adaptation_mode_active && (
+                  <Ionicons name="snow" size={14} color="#1cb0f6" style={{ marginRight: 10 }} />
+                )}
                 <Text style={{ color: theme.text, opacity: 0.6 }}>
                   {item.habit_type === 'count' ? `${displayCount}/${item.target_count}` : `${displayTime}/${item.target_time}`}
                 </Text>
@@ -1195,5 +1220,31 @@ const styles = StyleSheet.create({
   },
   friendChipTextActive: {
     color: '#fff',
+  },
+  adaptationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0f2fe',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  adaptationBadgeText: {
+    fontSize: 10,
+    color: '#0369a1',
+    fontWeight: '800',
+  },
+  leavePendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  leavePendingBadgeText: {
+    fontSize: 10,
+    color: '#991b1b',
+    fontWeight: '800',
   },
 });

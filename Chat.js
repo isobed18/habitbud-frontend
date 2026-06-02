@@ -30,8 +30,11 @@ export default function Chat({ route, navigation }) {
   const [typingUser, setTypingUser] = useState(null);
   const [otherUser, setOtherUser] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [conversation, setConversation] = useState(null);
   const [membersVisible, setMembersVisible] = useState(false);
+  const [freezeModalVisible, setFreezeModalVisible] = useState(false);
+  const [reserves, setReserves] = useState([]);
   const [levelUp, setLevelUp] = useState(null);
   const [wsEnabled, setWsEnabled] = useState(true);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
@@ -55,8 +58,18 @@ export default function Chat({ route, navigation }) {
     try {
       const response = await axiosInstance.get('users/api/profile/');
       setCurrentUserId(response.data.id);
+      setCurrentUserProfile(response.data);
     } catch (error) {
       console.error('Error fetching current user:', error);
+    }
+  };
+
+  const fetchReserves = async () => {
+    try {
+      const res = await axiosInstance.get(`habits/rooms/${conversationId}/reserve/`);
+      setReserves(res.data);
+    } catch (e) {
+      console.log('Error fetching reserves:', e.message);
     }
   };
 
@@ -384,6 +397,78 @@ export default function Chat({ route, navigation }) {
     }
   };
 
+  const handleReserveFreeze = async () => {
+    try {
+      await axiosInstance.post(`habits/rooms/${conversationId}/reserve/`);
+      Alert.alert('Başarılı! 🎉', 'Dondurucu başarıyla rezerve edildi.');
+      fetchReserves();
+      fetchCurrentUser();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Dondurucu rezerve edilemedi.';
+      Alert.alert('Hata', msg);
+    }
+  };
+
+  const handleWithdrawFreeze = async () => {
+    try {
+      await axiosInstance.delete(`habits/rooms/${conversationId}/reserve/`);
+      Alert.alert('Başarılı! 🎉', 'Rezerve dondurucu geri çekildi.');
+      fetchReserves();
+      fetchCurrentUser();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Dondurucu geri çekilemedi.';
+      Alert.alert('Hata', msg);
+    }
+  };
+
+  const handleRecoverStreak = async () => {
+    try {
+      const res = await axiosInstance.post(`habits/rooms/${conversationId}/recover-streak/`);
+      Alert.alert('Başarılı! 🎉', res.data.message);
+      fetchConversation();
+      fetchCurrentUser();
+      fetchMessages(); // load the "Streak saved by User" system message!
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Seri kurtarılamadı.';
+      Alert.alert('Hata', msg);
+    }
+  };
+
+  const handleLeaveGroup = () => {
+    if (!conversation?.group_id) return;
+    Alert.alert(
+      'Gruptan Ayrıl',
+      'Gruptan ayrılmak istediğinize emin misiniz? 24 saatlik bekleme süreci başlayacak ve grup 7 günlük Adaptasyon Moduna girecektir.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Ayrıl',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await axiosInstance.post(`habits/groups/${conversation.group_id}/leave/`);
+              Alert.alert('Talep Alındı', res.data.message);
+              setMembersVisible(false);
+              fetchConversation();
+              fetchMessages();
+            } catch (err) {
+              const msg = err.response?.data?.error || 'Ayrılma talebi gönderilemedi.';
+              Alert.alert('Hata', msg);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderGiftedSystemMessage = (props) => {
+    return (
+      <View style={styles.systemMessageContainer}>
+        <Text style={styles.systemMessageText}>{props.currentMessage.text}</Text>
+      </View>
+    );
+  };
+
   useEffect(() => {
     fetchCurrentUser();
   }, []);
@@ -392,6 +477,7 @@ export default function Chat({ route, navigation }) {
     if (currentUserId) {
       fetchConversation();
       fetchMessages();
+      fetchReserves();
     }
   }, [currentUserId, conversationId]);
 
@@ -496,14 +582,15 @@ export default function Chat({ route, navigation }) {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .map((msg) => ({
         _id: msg.id,
-        text: msg.message_type === 'PROOF' ? (msg.content || '') : (msg.content || ''),
+        text: msg.content || '',
         createdAt: new Date(msg.created_at),
         user: {
-          _id: msg.sender?.id,
-          name: msg.sender?.username,
+          _id: msg.sender?.id || 'system',
+          name: msg.sender?.username || 'Sistem',
           avatar: msg.sender?.avatar ? getImageUrl(msg.sender.avatar) : undefined,
         },
         image: msg.message_type === 'PROOF' && msg.proof_image ? getImageUrl(msg.proof_image) : undefined,
+        system: !msg.sender,
         raw: msg,
       }));
   }, [messages]);
@@ -637,6 +724,14 @@ export default function Chat({ route, navigation }) {
   };
 
   const renderMessage = ({ item, index }) => {
+    if (!item.sender) {
+      return (
+        <View style={styles.systemMessageContainer}>
+          <Text style={styles.systemMessageText}>{item.content}</Text>
+        </View>
+      );
+    }
+
     const isMyMessage = currentUserId && item.sender?.id === currentUserId;
     const canVerify = !isMyMessage && item.message_type === 'PROOF' && item.verification_status === 'PENDING';
 
@@ -755,7 +850,12 @@ export default function Chat({ route, navigation }) {
             <Text style={styles.headerTitle}>
               {conversation?.display_name || otherUser?.username || 'Sohbet'}
             </Text>
-            {conversation?.is_group ? (
+            {conversation?.adaptation_mode_active ? (
+              <View style={styles.adaptationHeaderChip}>
+                <Ionicons name="snow" size={10} color="#1cb0f6" style={{ marginRight: 3 }} />
+                <Text style={styles.adaptationHeaderChipText}>Adaptasyon Modu</Text>
+              </View>
+            ) : conversation?.is_group ? (
               <Text style={styles.headerSubtitle}>
                 {conversation.participants?.length || 0} üye · üyeleri gör
               </Text>
@@ -766,8 +866,31 @@ export default function Chat({ route, navigation }) {
             )}
           </View>
         </Pressable>
-        <View style={{ width: 40 }} />
+        {conversation?.is_group ? (
+          <Pressable onPress={() => setFreezeModalVisible(true)} style={styles.freezeBtn}>
+            <Ionicons name="snow" size={22} color="#1cb0f6" />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
+
+      {conversation?.recovery_eligible_date && (
+        <View style={styles.recoveryBanner}>
+          <View style={styles.recoveryBannerLeft}>
+            <Ionicons name="warning" size={20} color="#fff" />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={styles.recoveryBannerTitle}>Serin Tehlikede! ❄️</Text>
+              <Text style={styles.recoveryBannerSubtitle}>
+                Dün tamamlanamadı. Seriyi kurtarmak için 1 dondurucu harca!
+              </Text>
+            </View>
+          </View>
+          <Pressable style={styles.recoveryBannerBtn} onPress={handleRecoverStreak}>
+            <Text style={styles.recoveryBannerBtnText}>Kurtar</Text>
+          </Pressable>
+        </View>
+      )}
 
       {conversation?.is_group && conversation?.live_room_type !== 'general' && (
         <View style={styles.liveRoomPanel}>
@@ -850,6 +973,7 @@ export default function Chat({ route, navigation }) {
         renderInputToolbar={renderGiftedInputToolbar}
         renderComposer={renderGiftedComposer}
         renderChatFooter={renderGiftedFooter}
+        renderSystemMessage={renderGiftedSystemMessage}
         onPressAvatar={(user) => openProfile(user?._id)}
         messagesContainerStyle={styles.giftedMessagesContainer}
         bottomOffset={Platform.OS === 'ios' ? 12 : 0}
@@ -919,7 +1043,7 @@ export default function Chat({ route, navigation }) {
             <Text style={styles.membersTitle}>
               {conversation?.display_name || 'Grup'} · {conversation?.participants?.length || 0} üye
             </Text>
-            <ScrollView style={{ maxHeight: 360 }}>
+            <ScrollView style={{ maxHeight: 300, marginBottom: 12 }}>
               {(conversation?.participants || []).map((p) => (
                 <Pressable key={p.id} style={styles.memberRow} onPress={() => openProfile(p.id)}>
                   <View style={styles.memberAvatar}>
@@ -932,9 +1056,84 @@ export default function Chat({ route, navigation }) {
                 </Pressable>
               ))}
             </ScrollView>
+
+            {conversation?.is_group && conversation?.group_id && (
+              <Pressable
+                style={[
+                  styles.leaveGroupBtn,
+                  conversation?.my_pending_leave_at && styles.leaveGroupBtnDisabled
+                ]}
+                onPress={handleLeaveGroup}
+                disabled={!!conversation?.my_pending_leave_at}
+              >
+                <Ionicons name="exit-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.leaveGroupBtnText}>
+                  {conversation?.my_pending_leave_at ? 'Ayrılma Bekleniyor (24s)' : 'Gruptan Ayrıl'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>
+
+      {/* Freeze Reserve Modal */}
+      <Modal visible={freezeModalVisible} animationType="slide" transparent onRequestClose={() => setFreezeModalVisible(false)}>
+        <View style={styles.membersOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={() => setFreezeModalVisible(false)} />
+          <View style={styles.membersSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.membersTitle}>❄️ Grup Dondurucu Havuzu</Text>
+            <Text style={styles.freezeDesc}>
+              Dondurucunu bu gruba gönüllü rezerve et. Streak tehlikeye girdiğinde otomatik kullanılır. İstediğin zaman geri çekebilirsin!
+            </Text>
+            
+            <View style={styles.reserveStats}>
+              <View style={styles.reserveStatItem}>
+                <Text style={styles.reserveStatVal}>{reserves.length}</Text>
+                <Text style={styles.reserveStatLbl}>Havuzdaki Dondurucu</Text>
+              </View>
+              <View style={[styles.reserveStatItem, { borderLeftWidth: 1, borderLeftColor: '#f1f5f9' }]}>
+                <Text style={styles.reserveStatVal}>{currentUserProfile?.streak_freezes || 0}</Text>
+                <Text style={styles.reserveStatLbl}>Senin Dondurucun</Text>
+              </View>
+            </View>
+
+            <Text style={styles.reserveSectionTitle}>Aktif Rezervasyonlar</Text>
+            <ScrollView style={{ maxHeight: 150, marginBottom: 16 }}>
+              {reserves.length === 0 ? (
+                <Text style={styles.emptyReservesText}>Henüz rezerve dondurucu yok. İlkini sen ekle! ❄️</Text>
+              ) : (
+                reserves.map((res) => (
+                  <View key={res.id} style={styles.reserveRow}>
+                    <View style={styles.reserveRowLeft}>
+                      <Ionicons name="snow" size={18} color="#1cb0f6" style={{ marginRight: 8 }} />
+                      <Text style={styles.reserveUser}>@{res.username}</Text>
+                    </View>
+                    {res.can_withdraw && (
+                      <Pressable style={styles.withdrawBtn} onPress={handleWithdrawFreeze}>
+                        <Text style={styles.withdrawBtnText}>Geri Çek ↩️</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <Pressable
+              style={[
+                styles.reserveActionBtn,
+                (currentUserProfile?.streak_freezes || 0) <= 0 && styles.reserveActionBtnDisabled
+              ]}
+              onPress={handleReserveFreeze}
+              disabled={(currentUserProfile?.streak_freezes || 0) <= 0}
+            >
+              <Ionicons name="snow" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.reserveActionBtnText}>Dondurucu Rezerve Et</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <LevelUpModal visible={!!levelUp} level={levelUp} onClose={() => setLevelUp(null)} />
     </View>
   );
@@ -1400,5 +1599,188 @@ const styles = StyleSheet.create({
     backgroundColor: '#cbd5e1',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  freezeBtn: {
+    padding: 6,
+  },
+  adaptationHeaderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  adaptationHeaderChipText: {
+    fontSize: 10,
+    color: '#0369a1',
+    fontWeight: '800',
+  },
+  recoveryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ff4757',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderRadius: 16,
+    shadowColor: '#ff4757',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  recoveryBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  recoveryBannerTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#ffffff',
+  },
+  recoveryBannerSubtitle: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  recoveryBannerBtn: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginLeft: 10,
+  },
+  recoveryBannerBtnText: {
+    color: '#ff4757',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  leaveGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  leaveGroupBtnDisabled: {
+    backgroundColor: '#fca5a5',
+  },
+  leaveGroupBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  systemMessageContainer: {
+    alignSelf: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  systemMessageText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  freezeDesc: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  reserveStats: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  reserveStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  reserveStatVal: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  reserveStatLbl: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  reserveSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  emptyReservesText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  reserveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  reserveRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reserveUser: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  withdrawBtn: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  withdrawBtnText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  reserveActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1cb0f6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  reserveActionBtnDisabled: {
+    backgroundColor: '#bae6fd',
+  },
+  reserveActionBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
