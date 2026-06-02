@@ -18,6 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
+import { haptics } from './utils/feedback';
+let LottieView = null; let HEART_SRC = null;
+try { LottieView = require('lottie-react-native').default; HEART_SRC = require('./assets/lottie/heart.json'); } catch (_) {}
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +33,7 @@ const pastelColors = [
 
 export default function Conversations({ navigation }) {
   const [conversations, setConversations] = useState([]);
+  const [heartBurst, setHeartBurst] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
@@ -152,6 +156,7 @@ export default function Conversations({ navigation }) {
   const toggleLike = async (storyId) => {
     try {
       const res = await axiosInstance.post(`chat/stories/${storyId}/like/`);
+      if (res.data?.liked) { setHeartBurst((k) => k + 1); haptics.light(); }
       setStoryGroups(prev => prev.map(group => {
         return {
           ...group,
@@ -400,6 +405,17 @@ export default function Conversations({ navigation }) {
                 </View>
               </View>
 
+              {heartBurst > 0 && LottieView && HEART_SRC && (
+                <LottieView
+                  key={heartBurst}
+                  source={HEART_SRC}
+                  autoPlay
+                  loop={false}
+                  pointerEvents="none"
+                  style={styles.heartBurst}
+                />
+              )}
+
               <View style={styles.storyFooter}>
                 <View style={styles.storyContext}>
                   {activeStory.habit_details && (
@@ -488,6 +504,7 @@ const styles = StyleSheet.create({
   interactionRow: { alignItems: 'center' },
   likeBtn: { alignItems: 'center' },
   likeCount: { color: '#fff', fontWeight: 'bold', marginTop: 4, fontSize: 14 },
+  heartBurst: { position: 'absolute', alignSelf: 'center', top: '28%', width: 220, height: 220, zIndex: 50 },
 
   // Group room
   searchIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
