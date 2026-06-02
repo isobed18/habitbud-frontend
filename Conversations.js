@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,9 @@ import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
 import EmptyState from './components/EmptyState';
 import { haptics } from './utils/feedback';
+import InstagramStories from '@birdwingo/react-native-instagram-stories';
 let LottieView = null; let HEART_SRC = null; let HEART_EXPLODE_SRC = null; let EMPTY_CHAT_SRC = null;
+const DEFAULT_STORY_AVATAR = require('./assets/icon.png');
 try {
   LottieView = require('lottie-react-native').default;
   HEART_SRC = require('./assets/lottie/heartlike_burst.json');
@@ -46,9 +48,12 @@ export default function Conversations({ navigation }) {
 
   // Stories
   const [storyGroups, setStoryGroups] = useState([]);
-  const [activeStoryGroup, setActiveStoryGroup] = useState(null);
-  const [storyIndex, setStoryIndex] = useState(0);
-  const [storyModalVisible, setStoryModalVisible] = useState(false);
+  const [activeStoryMeta, setActiveStoryMeta] = useState(null);
+  const instagramStoriesRef = useRef(null);
+  const lastStoryTapRef = useRef(0);
+  const storyTapTimerRef = useRef(null);
+  const eventXRef = useRef(null);
+  const likingStoryRef = useRef(false);
 
   // Group rooms
   const [roomModalVisible, setRoomModalVisible] = useState(false);
@@ -111,28 +116,47 @@ export default function Conversations({ navigation }) {
     } catch (error) { console.error('Error fetching stories:', error); }
   };
 
-  const handleStoryPress = (group) => {
-    setActiveStoryGroup(group);
-    setStoryIndex(0); // Start from first story
-    setStoryModalVisible(true);
+  const findStoryById = (storyId) => {
+    for (const group of storyGroups) {
+      const story = group.stories?.find(s => String(s.id) === String(storyId));
+      if (story) return { group, story };
+    }
+    return null;
   };
 
   const handleNextStory = () => {
-    if (!activeStoryGroup) return;
-    if (storyIndex < activeStoryGroup.stories.length - 1) {
-      setStoryIndex(storyIndex + 1);
-    } else {
-      setStoryModalVisible(false);
-    }
+    instagramStoriesRef.current?.goToNextStory?.();
   };
 
-  const handlePrevStory = () => {
-    if (storyIndex > 0) {
-      setStoryIndex(storyIndex - 1);
-    }
+  const handlePreviousStory = () => {
+    instagramStoriesRef.current?.goToPreviousStory?.();
   };
 
-  const activeStory = activeStoryGroup ? activeStoryGroup.stories[storyIndex] : null;
+  const handleStoryTap = (event) => {
+    if (!activeStoryMeta?.storyId) return;
+    eventXRef.current = event?.nativeEvent?.locationX ?? null;
+    const now = Date.now();
+    const isDoubleTap = now - lastStoryTapRef.current < 280;
+    lastStoryTapRef.current = now;
+
+    if (isDoubleTap) {
+      if (storyTapTimerRef.current) {
+        clearTimeout(storyTapTimerRef.current);
+        storyTapTimerRef.current = null;
+      }
+      if (activeStoryMeta?.storyId) {
+        likeStory(activeStoryMeta.storyId, { forceLike: true });
+      }
+      return;
+    }
+
+    storyTapTimerRef.current = setTimeout(() => {
+      storyTapTimerRef.current = null;
+      const x = eventXRef.current;
+      if (x !== null && x < width / 2) handlePreviousStory();
+      else handleNextStory();
+    }, 280);
+  };
 
   const deleteStory = async (storyId) => {
     try {
@@ -140,27 +164,21 @@ export default function Conversations({ navigation }) {
       // Remove from local state
       setStoryGroups(prev => {
         return prev.map(group => {
-          if (group.user_id === activeStoryGroup.user_id) {
+          if (String(group.user_id) === String(activeStoryMeta?.userId)) {
             return { ...group, stories: group.stories.filter(s => s.id !== storyId) };
           }
           return group;
         }).filter(g => g.stories.length > 0);
       });
 
-      if (activeStoryGroup) {
-        if (activeStoryGroup.stories.length <= 1) {
-          setStoryModalVisible(false);
-        } else if (storyIndex >= activeStoryGroup.stories.length - 1) {
-          setStoryIndex(i => i - 1);
-        }
-      }
+      instagramStoriesRef.current?.goToNextStory?.();
       Alert.alert('Silindi', 'Hikaye silindi.');
     } catch (error) {
       Alert.alert('Hata', 'Hikaye silinemedi.');
     }
   };
 
-  const toggleLike = async (storyId) => {
+  const toggleLikeOld = async (storyId) => {
     try {
       const res = await axiosInstance.post(`chat/stories/${storyId}/like/`);
       if (res.data?.liked) {
@@ -185,6 +203,49 @@ export default function Conversations({ navigation }) {
     }
   };
 
+  const applyStoryLike = (storyId, data) => {
+    const updateStory = (s) => {
+      if (s.id !== storyId) return s;
+      return {
+        ...s,
+        is_liked: data.liked,
+        likes_count: data.likes_count ?? (s.is_liked ? Math.max((s.likes_count || 1) - 1, 0) : (s.likes_count || 0) + 1),
+      };
+    };
+
+    setStoryGroups(prev => prev.map(group => ({
+      ...group,
+      stories: group.stories.map(updateStory),
+    })));
+  };
+
+  const likeStory = async (storyId, options = {}) => {
+    if (likingStoryRef.current) return;
+    const current = findStoryById(storyId)?.story;
+    if (options.forceLike && current?.is_liked) {
+      haptics.light();
+      setHeartExplode((k) => k + 1);
+      return;
+    }
+
+    likingStoryRef.current = true;
+    try {
+      const res = await axiosInstance.post(`chat/stories/${storyId}/like/`);
+      if (res.data?.liked) {
+        haptics.medium();
+        setHeartExplode((k) => k + 1);
+        setTimeout(() => setHeartBurst((k) => k + 1), 550);
+      }
+      applyStoryLike(storyId, res.data);
+    } catch (err) {
+      console.error('Like error:', err);
+    } finally {
+      likingStoryRef.current = false;
+    }
+  };
+
+  const toggleLike = (storyId) => likeStory(storyId);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchConversations();
@@ -196,8 +257,19 @@ export default function Conversations({ navigation }) {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchConversations();
     });
-    return unsubscribe;
+    return () => {
+      if (storyTapTimerRef.current) clearTimeout(storyTapTimerRef.current);
+      unsubscribe();
+    };
   }, [navigation]);
+
+  useEffect(() => {
+    lastStoryTapRef.current = 0;
+    if (storyTapTimerRef.current) {
+      clearTimeout(storyTapTimerRef.current);
+      storyTapTimerRef.current = null;
+    }
+  }, [activeStoryMeta?.storyId]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -222,6 +294,45 @@ export default function Conversations({ navigation }) {
     }
     return participants[0];
   };
+
+  const renderStoryFooter = (group, story) => (
+    <View style={styles.storyFooter}>
+      <View style={styles.storyContext}>
+        {story.habit_details && (
+          <View style={styles.storyHabitTag}>
+            <Ionicons name="flash" size={16} color="#fbbf24" />
+            <Text style={styles.storyHabitName}>{story.habit_details.name} için ilerleme paylaştı!</Text>
+          </View>
+        )}
+        {story.content && (
+          <Text style={styles.footerContent}>{story.content}</Text>
+        )}
+      </View>
+
+      <View style={styles.interactionRow}>
+        {currentUserId === group.user_id && (
+          <Pressable onPress={() => deleteStory(story.id)} style={styles.storyDeleteBtn}>
+            <Ionicons name="trash-outline" size={24} color="#fff" />
+          </Pressable>
+        )}
+        <Pressable style={styles.likeBtn} onPress={() => toggleLike(story.id)}>
+          <Ionicons name={story.is_liked ? "heart" : "heart-outline"} size={32} color={story.is_liked ? "#ff4757" : "#fff"} />
+          <Text style={styles.likeCount}>{story.likes_count || 0}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const instagramStoryData = useMemo(() => storyGroups.map(group => ({
+    id: String(group.user_id),
+    name: group.username,
+    avatarSource: group.avatar ? { uri: getImageUrl(group.avatar) } : DEFAULT_STORY_AVATAR,
+    stories: (group.stories || []).map(story => ({
+      id: String(story.id),
+      source: { uri: getImageUrl(story.image) },
+      renderFooter: () => renderStoryFooter(group, story),
+    })),
+  })), [storyGroups, currentUserId]);
 
   const renderConversation = ({ item, index }) => {
     const otherUser = getOtherParticipant(item.participants);
@@ -285,7 +396,7 @@ export default function Conversations({ navigation }) {
 
       {/* Stories Strip */}
       <View style={styles.storiesContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+        <View style={styles.storyStripRow}>
           <Pressable
             style={styles.createStoryBtn}
             onPress={() => navigation.navigate('SubmitProof', { isStory: true })}
@@ -296,28 +407,35 @@ export default function Conversations({ navigation }) {
             <Text style={styles.storyUser}>Hikaye</Text>
           </Pressable>
 
-          {storyGroups.map((group) => {
-            const hasUnviewed = group.stories.some(s => !s.is_viewed);
-            return (
-              <Pressable
-                key={group.user_id}
-                style={styles.storyItem}
-                onPress={() => handleStoryPress(group)}
-              >
-                <View style={[styles.storyCircle, hasUnviewed && styles.storyCircleActive]}>
-                  <View style={styles.storyAvatar}>
-                    {group.avatar ? (
-                      <Image source={{ uri: getImageUrl(group.avatar) }} style={{ width: '100%', height: '100%', borderRadius: 30 }} />
-                    ) : (
-                      <Text style={styles.storyAvatarText}>{group.username?.charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                </View>
-                <Text style={styles.storyUser} numberOfLines={1}>{group.username}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          <InstagramStories
+            ref={instagramStoriesRef}
+            stories={instagramStoryData}
+            avatarSize={64}
+            storyAvatarSize={40}
+            showName
+            saveProgress
+            avatarBorderColors={['#f59e0b', '#ec4899', '#8b5cf6']}
+            avatarSeenBorderColors={['#d1d5db', '#d1d5db']}
+            nameTextStyle={styles.storyUser}
+            avatarListContainerStyle={styles.instagramStoryList}
+            imageOverlayView={(
+              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                <Pressable style={StyleSheet.absoluteFill} onPress={handleStoryTap} />
+                {heartExplode > 0 && LottieView && HEART_EXPLODE_SRC && (
+                  <LottieView key={`ex-${heartExplode}`} source={HEART_EXPLODE_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
+                )}
+                {heartBurst > 0 && LottieView && HEART_SRC && (
+                  <LottieView key={`bu-${heartBurst}`} source={HEART_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
+                )}
+              </View>
+            )}
+            onStoryStart={(userId, storyId) => setActiveStoryMeta({ userId, storyId })}
+            onHide={() => setActiveStoryMeta(null)}
+            closeIconColor="#fff"
+            progressActiveColor="#fff"
+            progressColor="rgba(255,255,255,0.35)"
+          />
+        </View>
       </View>
 
       <FlatList
@@ -387,11 +505,11 @@ export default function Conversations({ navigation }) {
       </Modal>
 
       {/* Story Modal */}
-      <Modal visible={storyModalVisible} animationType="fade" transparent>
+      {false && <Modal visible={false} animationType="fade" transparent>
         <View style={styles.storyModalOverlay}>
           {activeStory && (
             <View style={styles.fullStory}>
-              <Pressable style={{ flex: 1 }} onPress={handleNextStory}>
+              <Pressable style={{ flex: 1 }} onPress={handleStoryTap}>
                 <Image source={{ uri: getImageUrl(activeStory.image) }} style={styles.fullStoryImage} resizeMode="cover" />
               </Pressable>
 
@@ -457,7 +575,7 @@ export default function Conversations({ navigation }) {
             </View>
           )}
         </View>
-      </Modal>
+      </Modal>}
     </View>
   );
 }
