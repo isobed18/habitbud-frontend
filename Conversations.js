@@ -67,6 +67,48 @@ export default function Conversations({ navigation }) {
   const [roomJoinPolicy, setRoomJoinPolicy] = useState('open');
   const [workMinutes, setWorkMinutes] = useState('25');
   const [breakMinutes, setBreakMinutes] = useState('5');
+  const [discoverModalVisible, setDiscoverModalVisible] = useState(false);
+  const [discoverType, setDiscoverType] = useState('study');
+  const [discoverRooms, setDiscoverRooms] = useState([]);
+  const [loadingDiscover, setLoadingDiscover] = useState(false);
+
+  const fetchDiscoverRooms = async (type = discoverType) => {
+    setLoadingDiscover(true);
+    try {
+      const res = await axiosInstance.get(`chat/rooms/discover/?type=${type}`);
+      setDiscoverRooms(unwrapPagination(res.data));
+    } catch (e) {
+      Alert.alert('Error', 'Public rooms could not be loaded.');
+    } finally {
+      setLoadingDiscover(false);
+    }
+  };
+
+  const openDiscoverModal = async () => {
+    setDiscoverModalVisible(true);
+    await fetchDiscoverRooms(discoverType);
+  };
+
+  const changeDiscoverType = async (type) => {
+    setDiscoverType(type);
+    await fetchDiscoverRooms(type);
+  };
+
+  const joinDiscoverRoom = async (room) => {
+    try {
+      const res = await axiosInstance.post(`chat/rooms/${room.id}/join-request/`);
+      if (res.data?.status === 'pending') {
+        Alert.alert('Request sent', 'Room owner will approve your join request.');
+        await fetchDiscoverRooms(discoverType);
+        return;
+      }
+      setDiscoverModalVisible(false);
+      await fetchConversations();
+      navigation.navigate('Chat', { conversationId: room.id });
+    } catch (e) {
+      Alert.alert('Error', e?.response?.data?.error || 'Could not join room.');
+    }
+  };
 
   const openRoomModal = async () => {
     setRoomName('');
@@ -415,6 +457,9 @@ export default function Conversations({ navigation }) {
           <Pressable style={styles.searchIconBtn} onPress={() => navigation.navigate('Search')}>
             <Ionicons name="search" size={20} color="#333" />
           </Pressable>
+          <Pressable style={styles.searchIconBtn} onPress={openDiscoverModal}>
+            <Ionicons name="compass" size={20} color="#333" />
+          </Pressable>
           <Pressable style={styles.newRoomBtn} onPress={openRoomModal}>
             <Ionicons name="people" size={18} color="#fff" />
             <Text style={styles.newRoomBtnText}>Oda</Text>
@@ -483,6 +528,48 @@ export default function Conversations({ navigation }) {
         }
       />
 
+
+      <Modal visible={discoverModalVisible} animationType="slide" transparent>
+        <View style={styles.roomModalOverlay}>
+          <View style={styles.roomModalCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <Text style={styles.roomModalTitle}>Public Rooms</Text>
+              <Pressable onPress={() => setDiscoverModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color="#ccc" />
+              </Pressable>
+            </View>
+            <View style={styles.roomOptionRow}>
+              {[
+                { key: 'study', label: 'Study', icon: 'book' },
+                { key: 'workout', label: 'Sport', icon: 'barbell' },
+              ].map((option) => (
+                <Pressable key={option.key} style={[styles.roomTypePill, discoverType === option.key && styles.roomTypePillActive]} onPress={() => changeDiscoverType(option.key)}>
+                  <Ionicons name={option.icon} size={14} color={discoverType === option.key ? '#fff' : '#64748b'} />
+                  <Text style={[styles.roomTypeText, discoverType === option.key && styles.roomTypeTextActive]}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {loadingDiscover ? <ActivityIndicator color="#ff7f50" style={{ marginVertical: 30 }} /> : (
+              <ScrollView style={{ maxHeight: 420 }}>
+                {discoverRooms.map((room) => (
+                  <View key={room.id} style={styles.discoverRoomCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.discoverRoomTitle}>{room.name || room.display_name}</Text>
+                      <Text style={styles.discoverRoomMeta}>{room.participant_count || room.participants?.length || 0}/{room.capacity} people - {room.join_policy}</Text>
+                    </View>
+                    <Pressable style={[styles.discoverJoinBtn, room.has_join_request && { backgroundColor: '#e2e8f0' }]} onPress={() => joinDiscoverRoom(room)} disabled={room.has_join_request}>
+                      <Text style={[styles.discoverJoinText, room.has_join_request && { color: '#64748b' }]}>{room.has_join_request ? 'Pending' : (room.join_policy === 'request' ? 'Request' : 'Join')}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {discoverRooms.length === 0 && (
+                  <Text style={{ color: '#999', textAlign: 'center', marginVertical: 25 }}>No public room yet.</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Create Room Modal */}
       <Modal visible={roomModalVisible} animationType="slide" transparent>
@@ -741,5 +828,9 @@ const styles = StyleSheet.create({
   roomCheckboxActive: { backgroundColor: '#ff7f50', borderColor: '#ff7f50' },
   roomCreateBtn: { backgroundColor: '#ff7f50', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 15 },
   roomCreateBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  discoverRoomCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  discoverRoomTitle: { fontSize: 15, fontWeight: '900', color: '#0f172a' },
+  discoverRoomMeta: { marginTop: 3, fontSize: 12, color: '#64748b', fontWeight: '700' },
+  discoverJoinBtn: { backgroundColor: '#ff7f50', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
+  discoverJoinText: { color: '#fff', fontWeight: '900', fontSize: 12 },
 });
-

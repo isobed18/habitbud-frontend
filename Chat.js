@@ -40,6 +40,7 @@ export default function Chat({ route, navigation }) {
   const [timerPhase, setTimerPhase] = useState('focus');
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerRemaining, setTimerRemaining] = useState(0);
+  const [joinRequests, setJoinRequests] = useState([]);
   const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
   const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
@@ -63,6 +64,7 @@ export default function Chat({ route, navigation }) {
     try {
       const r = await axiosInstance.get(`chat/conversations/${conversationId}/`);
       setConversation(r.data);
+      fetchJoinRequests(r.data);
       if (!r.data.is_group && r.data.participants && currentUserId) {
         const other = r.data.participants.find((p) => p.id !== currentUserId);
         if (other) setOtherUser(other);
@@ -71,6 +73,29 @@ export default function Chat({ route, navigation }) {
         fetchHabitsForRoom(r.data);
       }
     } catch (e) { /* silent */ }
+  };
+
+  const fetchJoinRequests = async (room = conversation) => {
+    if (!room?.is_group || !room?.created_by_id || String(room.created_by_id) !== String(currentUserId)) {
+      setJoinRequests([]);
+      return;
+    }
+    try {
+      const res = await axiosInstance.get(`chat/rooms/${conversationId}/join-request/`);
+      setJoinRequests(unwrapPagination(res.data));
+    } catch (e) {
+      setJoinRequests([]);
+    }
+  };
+
+  const respondJoinRequest = async (requestId, action) => {
+    try {
+      await axiosInstance.post(`chat/rooms/join-requests/${requestId}/respond/`, { action });
+      await fetchConversation();
+      await fetchJoinRequests(conversation);
+    } catch (e) {
+      Alert.alert('Error', e?.response?.data?.error || 'Request could not be updated.');
+    }
   };
 
   const parseDurationToSeconds = (value) => {
@@ -781,6 +806,25 @@ export default function Chat({ route, navigation }) {
             </View>
           </View>
 
+          {joinRequests.length > 0 && (
+            <View style={styles.joinRequestBox}>
+              <Text style={styles.joinRequestTitle}>Join Requests</Text>
+              {joinRequests.map((req) => (
+                <View key={req.id} style={styles.joinRequestRow}>
+                  <Text style={styles.joinRequestUser}>{req.user?.username}</Text>
+                  <View style={styles.joinRequestActions}>
+                    <Pressable style={[styles.joinRequestBtn, { backgroundColor: '#10b981' }]} onPress={() => respondJoinRequest(req.id, 'accept')}>
+                      <Ionicons name="checkmark" size={14} color="#fff" />
+                    </Pressable>
+                    <Pressable style={[styles.joinRequestBtn, { backgroundColor: '#ef4444' }]} onPress={() => respondJoinRequest(req.id, 'decline')}>
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.liveHabitRow}>
             <Text style={styles.liveHabitText}>
               {liveHabit ? `${liveHabit.name}: ${formatSeconds(parseDurationToSeconds(liveHabit.total_time))} / ${formatSeconds(parseDurationToSeconds(liveHabit.target_time))}` : 'Bu oda için uygun time-based habit bulunamadı.'}
@@ -1040,6 +1084,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  joinRequestBox: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  joinRequestTitle: { fontSize: 12, fontWeight: '900', color: '#475569', marginBottom: 8 },
+  joinRequestRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  joinRequestUser: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  joinRequestActions: { flexDirection: 'row', gap: 8 },
+  joinRequestBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   membersOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   membersSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', alignSelf: 'center', marginBottom: 12 },
@@ -1352,4 +1402,3 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
 });
-

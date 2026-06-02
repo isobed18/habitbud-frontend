@@ -80,6 +80,10 @@ export default function Home({ navigation }) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
   const [buyingFreeze, setBuyingFreeze] = useState(false);
+  const [timerModalVisible, setTimerModalVisible] = useState(false);
+  const [timerHabit, setTimerHabit] = useState(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -129,7 +133,13 @@ export default function Home({ navigation }) {
       const response = await axiosInstance.get(`habits/${habitId}/stats/`);
       setActiveStats(response.data);
       setStatsModalVisible(true);
-    } catch (e) { Alert.alert('Hata', 'Stats error'); }
+    } catch (e) {
+      if (e?.response?.status === 403) {
+        Alert.alert('Stats locked', 'Free plan keeps tracking open, but detailed statistics are paid-only for now.');
+      } else {
+        Alert.alert('Hata', 'Stats error');
+      }
+    }
     finally { setLoadingStats(false); }
   };
 
@@ -145,6 +155,54 @@ export default function Home({ navigation }) {
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const parseDurationToSeconds = (value) => {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+    const parts = String(value).split(':').map((p) => parseInt(p, 10) || 0);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 0;
+  };
+
+  useEffect(() => {
+    if (!timerRunning) return undefined;
+    const id = setInterval(() => setTimerSeconds((prev) => prev + 1), 1000);
+    return () => clearInterval(id);
+  }, [timerRunning]);
+
+  const openTimerModal = (habit) => {
+    setTimerHabit(habit);
+    setTimerSeconds(0);
+    setTimerRunning(false);
+    setTimerModalVisible(true);
+  };
+
+  const finishTimerSession = async () => {
+    if (!timerHabit || timerSeconds <= 0) {
+      setTimerRunning(false);
+      setTimerModalVisible(false);
+      return;
+    }
+    const current = parseDurationToSeconds(timerHabit.total_time);
+    const nextTotal = current + timerSeconds;
+    try {
+      const response = await axiosInstance.put(`habits/${timerHabit.id}/`, { total_time: formatSecondsToTime(nextTotal), date: toLocalDateString(currentDate) });
+      const target = parseDurationToSeconds(response.data?.target_time || timerHabit.target_time);
+      setTimerRunning(false);
+      setTimerModalVisible(false);
+      reward(3, { label: 'Focus saved', flash: 'xp' });
+      await fetchHabits();
+      if (target > 0 && nextTotal >= target) {
+        Alert.alert('Focus complete', 'Target reached. Send a check for verification?', [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Send Check', onPress: () => navigation.navigate('SubmitProof', { habitId: timerHabit.id }) },
+        ]);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Timer progress could not be saved.');
+    }
   };
 
   const openEditModal = (habit) => {
