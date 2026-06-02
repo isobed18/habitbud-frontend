@@ -20,10 +20,11 @@ import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
 import EmptyState from './components/EmptyState';
 import { haptics } from './utils/feedback';
-let LottieView = null; let HEART_SRC = null; let EMPTY_CHAT_SRC = null;
+let LottieView = null; let HEART_SRC = null; let HEART_EXPLODE_SRC = null; let EMPTY_CHAT_SRC = null;
 try {
   LottieView = require('lottie-react-native').default;
   HEART_SRC = require('./assets/lottie/heartlike_burst.json');
+  HEART_EXPLODE_SRC = require('./assets/lottie/heart_explode.json');
   EMPTY_CHAT_SRC = require('./assets/lottie/empty_inbox.json');
 } catch (_) {}
 
@@ -39,6 +40,7 @@ const pastelColors = [
 export default function Conversations({ navigation }) {
   const [conversations, setConversations] = useState([]);
   const [heartBurst, setHeartBurst] = useState(0);
+  const [heartExplode, setHeartExplode] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
@@ -161,7 +163,12 @@ export default function Conversations({ navigation }) {
   const toggleLike = async (storyId) => {
     try {
       const res = await axiosInstance.post(`chat/stories/${storyId}/like/`);
-      if (res.data?.liked) { setHeartBurst((k) => k + 1); haptics.light(); }
+      if (res.data?.liked) {
+        // Inflate (explode) then hearts fly up — same spot.
+        haptics.medium();
+        setHeartExplode((k) => k + 1);
+        setTimeout(() => setHeartBurst((k) => k + 1), 550);
+      }
       setStoryGroups(prev => prev.map(group => {
         return {
           ...group,
@@ -413,15 +420,11 @@ export default function Conversations({ navigation }) {
                 </View>
               </View>
 
+              {heartExplode > 0 && LottieView && HEART_EXPLODE_SRC && (
+                <LottieView key={`ex-${heartExplode}`} source={HEART_EXPLODE_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
+              )}
               {heartBurst > 0 && LottieView && HEART_SRC && (
-                <LottieView
-                  key={heartBurst}
-                  source={HEART_SRC}
-                  autoPlay
-                  loop={false}
-                  pointerEvents="none"
-                  style={styles.heartBurst}
-                />
+                <LottieView key={`bu-${heartBurst}`} source={HEART_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
               )}
 
               <View style={styles.storyFooter}>

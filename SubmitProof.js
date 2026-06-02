@@ -20,6 +20,8 @@ import { unwrapPagination } from './utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import { getHabitColor } from './utils/colors';
 import { haptics } from './utils/feedback';
+let LottieView = null; let PLANE_SRC = null;
+try { LottieView = require('lottie-react-native').default; PLANE_SRC = require('./assets/lottie/paperplane_message_blue.json'); } catch (_) {}
 
 const { width } = Dimensions.get('window');
 const UNDO_MS = 4500; // recall window
@@ -40,6 +42,7 @@ export default function SubmitProof({ route, navigation }) {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [sending, setSending] = useState(false);
+  const [planeKey, setPlaneKey] = useState(0);
 
   // Undo snackbar state
   const [undo, setUndo] = useState(null); // { storyId, checkIds: [] }
@@ -128,6 +131,7 @@ export default function SubmitProof({ route, navigation }) {
       haptics.success();
       setSheetVisible(false);
       setSending(false);
+      if (selectedFriends.length > 0) setPlaneKey((k) => k + 1); // paper-plane swoosh
       startUndo(result);
     } catch (e) {
       setSending(false);
@@ -309,6 +313,18 @@ export default function SubmitProof({ route, navigation }) {
         </View>
       </Modal>
 
+      {/* Paper-plane swoosh when a check is sent to friends */}
+      {planeKey > 0 && LottieView && PLANE_SRC && (
+        <LottieView
+          key={planeKey}
+          source={PLANE_SRC}
+          autoPlay
+          loop={false}
+          pointerEvents="none"
+          style={styles.planeAnim}
+        />
+      )}
+
       {/* ---------------- Undo snackbar ---------------- */}
       {undo && (
         <View style={styles.snackbar}>
@@ -384,6 +400,7 @@ const styles = StyleSheet.create({
   previewClose: { position: 'absolute', top: 50, right: 20 },
 
   // Undo snackbar
+  planeAnim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 },
   snackbar: { position: 'absolute', left: 16, right: 16, bottom: 40, backgroundColor: '#16a34a', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 },
   snackbarProgress: { position: 'absolute', top: 0, left: 0, height: '100%', backgroundColor: 'rgba(255,255,255,0.22)' },
   snackbarRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },

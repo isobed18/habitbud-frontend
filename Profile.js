@@ -20,6 +20,7 @@ import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import Avatar from './components/Avatar';
 import Avatar3DModal from './components/Avatar3DModal';
+import CurrencyIcon from './components/CurrencyIcon';
 import { parseAvatarConfig } from './utils/avatar';
 
 const { width } = Dimensions.get('window');
@@ -283,12 +284,12 @@ const ProfilePage = ({ navigation }) => {
               <Text style={styles.statLabel}>Seviye</Text>
             </View>
             <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#eee' }]}>
-              <Ionicons name="flash" size={18} color="#f59e0b" />
-              <Text style={[styles.statValue, { color: '#d97706' }]}>{profile.xp || 0}</Text>
+              <CurrencyIcon type="xp" size={26} />
+              <Text style={[styles.statValue, { color: '#2563eb' }]}>{profile.xp || 0}</Text>
               <Text style={styles.statLabel}>XP</Text>
             </View>
             <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#eee' }]}>
-              <Ionicons name="diamond" size={18} color="#06b6d4" />
+              <CurrencyIcon type="gem" size={26} />
               <Text style={[styles.statValue, { color: '#0891b2' }]}>{profile.points || 0}</Text>
               <Text style={styles.statLabel}>Elmas</Text>
             </View>
