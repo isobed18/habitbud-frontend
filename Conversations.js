@@ -61,10 +61,22 @@ export default function Conversations({ navigation }) {
   const [friends, setFriends] = useState([]);
   const [selectedFriends, setSelectedFriends] = useState([]);
   const [creatingRoom, setCreatingRoom] = useState(false);
+  const [roomType, setRoomType] = useState('general');
+  const [roomCapacity, setRoomCapacity] = useState('8');
+  const [roomPrivacy, setRoomPrivacy] = useState('friends');
+  const [roomJoinPolicy, setRoomJoinPolicy] = useState('open');
+  const [workMinutes, setWorkMinutes] = useState('25');
+  const [breakMinutes, setBreakMinutes] = useState('5');
 
   const openRoomModal = async () => {
     setRoomName('');
     setSelectedFriends([]);
+    setRoomType('general');
+    setRoomCapacity('8');
+    setRoomPrivacy('friends');
+    setRoomJoinPolicy('open');
+    setWorkMinutes('25');
+    setBreakMinutes('5');
     setRoomModalVisible(true);
     try {
       const res = await axiosInstance.get('friends/list/');
@@ -83,6 +95,13 @@ export default function Conversations({ navigation }) {
       const res = await axiosInstance.post('chat/rooms/', {
         name: roomName.trim(),
         participant_ids: selectedFriends,
+        live_room_type: roomType,
+        required_habit_slug: roomType === 'study' ? 'study' : (roomType === 'workout' ? 'workout' : ''),
+        capacity: parseInt(roomCapacity, 10) || 8,
+        privacy: roomPrivacy,
+        join_policy: roomJoinPolicy,
+        pomodoro_work_minutes: parseInt(workMinutes, 10) || 25,
+        pomodoro_break_minutes: parseInt(breakMinutes, 10) || 5,
       });
       setRoomModalVisible(false);
       setCreatingRoom(false);
@@ -340,6 +359,8 @@ export default function Conversations({ navigation }) {
     const theme = pastelColors[index % pastelColors.length];
     const title = item.display_name || (item.is_group ? (item.name || 'Grup') : (otherUser ? otherUser.username : 'Bilinmeyen'));
     const initial = item.is_group ? null : (title ? title.charAt(0).toUpperCase() : '?');
+    const isLiveRoom = item.is_group && item.live_room_type && item.live_room_type !== 'general';
+    const liveRoomLabel = item.live_room_type === 'study' ? 'Ders Odası' : (item.live_room_type === 'workout' ? 'Spor Odası' : '');
 
     return (
       <Pressable
@@ -363,6 +384,13 @@ export default function Conversations({ navigation }) {
               <Text style={styles.timeText}>{formatDate(lastMessage.created_at)}</Text>
             )}
           </View>
+
+          {isLiveRoom && (
+            <View style={styles.liveRoomBadge}>
+              <Ionicons name={item.live_room_type === 'study' ? 'book' : 'barbell'} size={11} color="#fff" />
+              <Text style={styles.liveRoomBadgeText}>{liveRoomLabel}</Text>
+            </View>
+          )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
             {lastMessage?.message_type === 'PROOF' && (
@@ -475,6 +503,56 @@ export default function Conversations({ navigation }) {
             />
 
             <Text style={styles.roomSectionLabel}>Arkadaş Ekle</Text>
+            <Text style={styles.roomSectionLabel}>Oda Tipi</Text>
+            <View style={styles.roomOptionRow}>
+              {[
+                { key: 'general', label: 'Genel', icon: 'people' },
+                { key: 'study', label: 'Ders', icon: 'book' },
+                { key: 'workout', label: 'Spor', icon: 'barbell' },
+              ].map((option) => (
+                <Pressable
+                  key={option.key}
+                  style={[styles.roomTypePill, roomType === option.key && styles.roomTypePillActive]}
+                  onPress={() => setRoomType(option.key)}
+                >
+                  <Ionicons name={option.icon} size={14} color={roomType === option.key ? '#fff' : '#64748b'} />
+                  <Text style={[styles.roomTypeText, roomType === option.key && styles.roomTypeTextActive]}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.roomSettingsGrid}>
+              <View style={styles.roomSettingCell}>
+                <Text style={styles.roomSectionLabel}>Kapasite</Text>
+                <TextInput style={styles.roomSmallInput} value={roomCapacity} onChangeText={setRoomCapacity} keyboardType="number-pad" />
+              </View>
+              <View style={styles.roomSettingCell}>
+                <Text style={styles.roomSectionLabel}>Gizlilik</Text>
+                <Pressable style={styles.roomSmallInput} onPress={() => setRoomPrivacy(roomPrivacy === 'friends' ? 'private' : roomPrivacy === 'private' ? 'public' : 'friends')}>
+                  <Text style={styles.roomSmallInputText}>{roomPrivacy}</Text>
+                </Pressable>
+              </View>
+              <View style={styles.roomSettingCell}>
+                <Text style={styles.roomSectionLabel}>Katılım</Text>
+                <Pressable style={styles.roomSmallInput} onPress={() => setRoomJoinPolicy(roomJoinPolicy === 'open' ? 'request' : 'open')}>
+                  <Text style={styles.roomSmallInputText}>{roomJoinPolicy}</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {roomType !== 'general' && (
+              <View style={styles.pomodoroBox}>
+                <View style={styles.roomSettingCell}>
+                  <Text style={styles.roomSectionLabel}>Odak dk</Text>
+                  <TextInput style={styles.roomSmallInput} value={workMinutes} onChangeText={setWorkMinutes} keyboardType="number-pad" />
+                </View>
+                <View style={styles.roomSettingCell}>
+                  <Text style={styles.roomSectionLabel}>Mola dk</Text>
+                  <TextInput style={styles.roomSmallInput} value={breakMinutes} onChangeText={setBreakMinutes} keyboardType="number-pad" />
+                </View>
+              </View>
+            )}
+
             <ScrollView style={{ maxHeight: 280 }}>
               {friends.map((f) => {
                 const isSel = selectedFriends.includes(f.id);
@@ -639,11 +717,23 @@ const styles = StyleSheet.create({
   searchIconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
   newRoomBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ff7f50', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 6 },
   newRoomBtnText: { color: '#fff', fontWeight: 'bold' },
+  liveRoomBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, backgroundColor: '#6366f1', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginTop: 4 },
+  liveRoomBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   roomModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   roomModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
   roomModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   roomNameInput: { backgroundColor: '#f5f5f5', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 15 },
   roomSectionLabel: { fontSize: 14, fontWeight: '700', color: '#666', marginBottom: 8 },
+  roomOptionRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  roomTypePill: { flex: 1, flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9', borderRadius: 14, paddingVertical: 10 },
+  roomTypePillActive: { backgroundColor: '#6366f1' },
+  roomTypeText: { color: '#64748b', fontSize: 12, fontWeight: '800' },
+  roomTypeTextActive: { color: '#fff' },
+  roomSettingsGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  roomSettingCell: { flex: 1 },
+  roomSmallInput: { minHeight: 42, backgroundColor: '#f8fafc', borderRadius: 12, paddingHorizontal: 10, justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  roomSmallInputText: { color: '#0f172a', fontWeight: '700' },
+  pomodoroBox: { flexDirection: 'row', gap: 8, backgroundColor: '#eef2ff', borderRadius: 14, padding: 10, marginBottom: 12 },
   roomFriendRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   roomFriendAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#a855f7', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   roomFriendName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },

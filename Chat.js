@@ -35,6 +35,11 @@ export default function Chat({ route, navigation }) {
   const [levelUp, setLevelUp] = useState(null);
   const [wsEnabled, setWsEnabled] = useState(true);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [habits, setHabits] = useState([]);
+  const [liveHabit, setLiveHabit] = useState(null);
+  const [timerPhase, setTimerPhase] = useState('focus');
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerRemaining, setTimerRemaining] = useState(0);
   const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
   const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
@@ -62,7 +67,53 @@ export default function Chat({ route, navigation }) {
         const other = r.data.participants.find((p) => p.id !== currentUserId);
         if (other) setOtherUser(other);
       }
+      if (r.data.live_room_type && r.data.live_room_type !== 'general') {
+        fetchHabitsForRoom(r.data);
+      }
     } catch (e) { /* silent */ }
+  };
+
+  const parseDurationToSeconds = (value) => {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    const parts = String(value).split(':').map((n) => parseInt(n, 10) || 0);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 0;
+  };
+
+  const formatSeconds = (seconds) => {
+    const safe = Math.max(0, seconds || 0);
+    const m = Math.floor(safe / 60);
+    const s = safe % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const formatSecondsToDuration = (seconds) => {
+    const safe = Math.max(0, seconds || 0);
+    const h = Math.floor(safe / 3600);
+    const m = Math.floor((safe % 3600) / 60);
+    const s = safe % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const findRoomHabit = (room, list) => {
+    const slug = room.required_habit_slug || room.live_room_type;
+    const keywords = slug === 'study' ? ['ders', 'study', 'kitap'] : ['spor', 'workout', 'fitness', 'antrenman'];
+    return list.find((h) => h.habit_type === 'time' && keywords.some((kw) => String(h.name || '').toLowerCase().includes(kw))) || null;
+  };
+
+  const fetchHabitsForRoom = async (room = conversation) => {
+    try {
+      const response = await axiosInstance.get(`habits/?t=${Date.now()}`);
+      const list = unwrapPagination(response.data);
+      setHabits(list);
+      const match = findRoomHabit(room, list);
+      setLiveHabit(match);
+      if (room?.pomodoro_work_minutes) setTimerRemaining((room.pomodoro_work_minutes || 25) * 60);
+    } catch (error) {
+      console.log('Live room habits load failed:', error?.message);
+    }
   };
 
   const openProfile = (userId) => {
@@ -347,6 +398,74 @@ export default function Chat({ route, navigation }) {
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const addLiveHabitTime = async (secondsToAdd) => {
+    if (!liveHabit) return null;
+    const nextTotal = parseDurationToSeconds(liveHabit.total_time) + secondsToAdd;
+    const response = await axiosInstance.put(`habits/${liveHabit.id}/`, {
+      total_time: formatSecondsToDuration(nextTotal),
+    });
+    setLiveHabit(response.data);
+    setHabits(prev => prev.map(h => h.id === response.data.id ? response.data : h));
+    return response.data;
+  };
+
+  const startLiveTimer = () => {
+    if (!conversation?.live_room_type || conversation.live_room_type === 'general') return;
+    if (!liveHabit) {
+      Alert.alert('Habit gerekli', conversation.live_room_type === 'study' ? 'Önce Ders Çalış hazır habitini ekle.' : 'Önce Spor hazır habitini ekle.');
+      return;
+    }
+    if (!timerRemaining) {
+      setTimerRemaining((conversation.pomodoro_work_minutes || 25) * 60);
+    }
+    setTimerRunning(true);
+  };
+
+  const pauseLiveTimer = () => setTimerRunning(false);
+
+  const resetLiveTimer = () => {
+    setTimerRunning(false);
+    setTimerPhase('focus');
+    setTimerRemaining((conversation?.pomodoro_work_minutes || 25) * 60);
+  };
+
+  const completeFocusSession = async () => {
+    setTimerRunning(false);
+    try {
+      await addLiveHabitTime((conversation?.pomodoro_work_minutes || 25) * 60);
+      setTimerPhase('break');
+      setTimerRemaining((conversation?.pomodoro_break_minutes || 5) * 60);
+      Alert.alert('Mola zamanı', 'Odak turu kaydedildi. Şimdi odaya bir check fotoğrafı gönder.', [
+        { text: 'Sonra', style: 'cancel' },
+        { text: 'Check Gönder', onPress: () => navigation.navigate('SubmitProof', { conversationId, habitId: liveHabit?.id }) },
+      ]);
+    } catch (error) {
+      Alert.alert('Hata', 'Süre kaydedilemedi.');
+    }
+  };
+
+  const completeBreakSession = () => {
+    setTimerRunning(false);
+    setTimerPhase('focus');
+    setTimerRemaining((conversation?.pomodoro_work_minutes || 25) * 60);
+  };
+
+  useEffect(() => {
+    if (!timerRunning) return undefined;
+    const interval = setInterval(() => {
+      setTimerRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (timerPhase === 'focus') completeFocusSession();
+          else completeBreakSession();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timerRunning, timerPhase, conversation?.id, liveHabit?.id]);
+
   const giftedMessages = useMemo(() => {
     return [...messages]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -625,6 +744,56 @@ export default function Chat({ route, navigation }) {
         <View style={{ width: 40 }} />
       </View>
 
+      {conversation?.is_group && conversation?.live_room_type !== 'general' && (
+        <View style={styles.liveRoomPanel}>
+          <View style={styles.liveRoomTop}>
+            <View style={styles.liveRoomTitleRow}>
+              <Ionicons name={conversation.live_room_type === 'study' ? 'book' : 'barbell'} size={18} color="#6366f1" />
+              <Text style={styles.liveRoomTitle}>
+                {conversation.live_room_type === 'study' ? 'Canlı Ders Odası' : 'Canlı Spor Odası'}
+              </Text>
+            </View>
+            <Text style={styles.liveRoomMeta}>
+              {conversation.participants?.length || 0}/{conversation.capacity || 8} · {conversation.privacy || 'friends'} · {conversation.join_policy || 'open'}
+            </Text>
+          </View>
+
+          <View style={styles.timerRow}>
+            <View>
+              <Text style={styles.timerPhase}>{timerPhase === 'focus' ? 'Odak' : 'Mola'}</Text>
+              <Text style={styles.timerValue}>{formatSeconds(timerRemaining || ((conversation.pomodoro_work_minutes || 25) * 60))}</Text>
+            </View>
+            <View style={styles.timerActions}>
+              <Pressable style={styles.timerButton} onPress={timerRunning ? pauseLiveTimer : startLiveTimer}>
+                <Ionicons name={timerRunning ? 'pause' : 'play'} size={16} color="#fff" />
+                <Text style={styles.timerButtonText}>{timerRunning ? 'Duraklat' : 'Başlat'}</Text>
+              </Pressable>
+              <Pressable style={[styles.timerButton, styles.timerGhostButton]} onPress={resetLiveTimer}>
+                <Ionicons name="refresh" size={16} color="#6366f1" />
+              </Pressable>
+              <Pressable
+                style={[styles.timerButton, styles.timerCheckButton, !liveHabit && { opacity: 0.5 }]}
+                onPress={() => liveHabit && navigation.navigate('SubmitProof', { conversationId, habitId: liveHabit.id })}
+                disabled={!liveHabit}
+              >
+                <Ionicons name="camera" size={16} color="#fff" />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.liveHabitRow}>
+            <Text style={styles.liveHabitText}>
+              {liveHabit ? `${liveHabit.name}: ${formatSeconds(parseDurationToSeconds(liveHabit.total_time))} / ${formatSeconds(parseDurationToSeconds(liveHabit.target_time))}` : 'Bu oda için uygun time-based habit bulunamadı.'}
+            </Text>
+            {!liveHabit && (
+              <Pressable onPress={() => navigation.navigate('AddHabitModal')}>
+                <Text style={styles.liveHabitLink}>Habit ekle</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
+
       <GiftedChat
         messages={giftedMessages}
         user={{ _id: currentUserId }}
@@ -774,6 +943,102 @@ const styles = StyleSheet.create({
     color: '#6366f1',
     fontWeight: '600',
     marginTop: 1,
+  },
+  liveRoomPanel: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  liveRoomTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  liveRoomTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveRoomTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  liveRoomMeta: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#eef2ff',
+    borderRadius: 16,
+    padding: 12,
+  },
+  timerPhase: {
+    fontSize: 11,
+    color: '#6366f1',
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  timerValue: {
+    fontSize: 30,
+    color: '#0f172a',
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  timerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#6366f1',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  timerGhostButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    paddingHorizontal: 10,
+  },
+  timerCheckButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 10,
+  },
+  timerButtonText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  liveHabitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 10,
+  },
+  liveHabitText: {
+    flex: 1,
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  liveHabitLink: {
+    color: '#6366f1',
+    fontSize: 12,
+    fontWeight: '900',
   },
   membersOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   membersSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34 },
