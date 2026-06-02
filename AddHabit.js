@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
+import { unwrapPagination } from './utils/api';
 
 const WEEKDAYS = [
     { key: 0, label: 'Mon' },
@@ -44,6 +45,11 @@ export default function AddHabit({ navigation }) {
     const [timePickerVisible, setTimePickerVisible] = useState(false);
     const [templates, setTemplates] = useState([]);
     const [savingPreset, setSavingPreset] = useState(null);
+    const [friends, setFriends] = useState([]);
+    const [connectionType, setConnectionType] = useState('solo'); // 'solo', 'duo', 'group'
+    const [selectedFriendId, setSelectedFriendId] = useState(null);
+    const [selectedFriendIds, setSelectedFriendIds] = useState([]);
+    const [groupName, setGroupName] = useState('');
 
     useEffect(() => {
         (async () => {
@@ -52,6 +58,12 @@ export default function AddHabit({ navigation }) {
                 setTemplates(Array.isArray(res.data) ? res.data : (res.data?.results || []));
             } catch (e) {
                 console.log('Templates load failed:', e?.message);
+            }
+            try {
+                const res = await axiosInstance.get('friends/list/');
+                setFriends(unwrapPagination(res.data));
+            } catch (e) {
+                console.log('Friends load failed:', e?.message);
             }
         })();
     }, []);
@@ -118,18 +130,47 @@ export default function AddHabit({ navigation }) {
             Alert.alert('Error', 'Pick at least one weekday.');
             return;
         }
+        if (connectionType === 'duo' && !selectedFriendId) {
+            Alert.alert('Hata', 'Lütfen ortak yapmak istediğiniz arkadaşınızı seçin.');
+            return;
+        }
+        if (connectionType === 'group') {
+            if (!groupName.trim()) {
+                Alert.alert('Hata', 'Grup adı boş olamaz.');
+                return;
+            }
+            if (selectedFriendIds.length < 2) {
+                Alert.alert('Hata', 'Grup için kendiniz hariç en az 2 arkadaş seçmelisiniz (toplam en az 3 üye).');
+                return;
+            }
+        }
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            await axiosInstance.post('habits/', buildHabitPayload());
+            const res = await axiosInstance.post('habits/', buildHabitPayload());
+            const habitId = res.data.id;
+
+            if (connectionType === 'duo') {
+                await axiosInstance.post('habits/connections/create/', {
+                    habit_id: habitId,
+                    friend_id: selectedFriendId
+                });
+            } else if (connectionType === 'group') {
+                await axiosInstance.post('habits/groups/create/', {
+                    name: groupName,
+                    habit_id: habitId,
+                    participant_ids: selectedFriendIds
+                });
+            }
+
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Done', 'Habit created', [
-                { text: 'OK', onPress: () => navigation.goBack() }
+            Alert.alert('Harika! 🎉', connectionType === 'duo' ? 'Ortak alışkanlık daveti gönderildi!' : (connectionType === 'group' ? 'Grup alışkanlığı kuruldu!' : 'Alışkanlık oluşturuldu!'), [
+                { text: 'Tamam', onPress: () => navigation.goBack() }
             ]);
         } catch (error) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            const detail = error.response?.data?.error || error.response?.data?.schedule || 'unknown';
-            Alert.alert('Error', `Could not create habit: ${detail}`);
+            const detail = error.response?.data?.error || error.response?.data?.schedule || 'unknown error';
+            Alert.alert('Hata', `İşlem başarısız: ${detail}`);
         }
     };
 
@@ -317,6 +358,98 @@ export default function AddHabit({ navigation }) {
                     })}
                 </View>
 
+                <Text style={[styles.label, { marginTop: 15 }]}>Alışkanlık Türü</Text>
+                <View style={styles.typeRow}>
+                    {[
+                        { key: 'solo', label: 'Solo 👤' },
+                        { key: 'duo', label: 'Duo 🥂' },
+                        { key: 'group', label: 'Grup 👥' },
+                    ].map((option) => (
+                        <Pressable
+                            key={option.key}
+                            style={[styles.typeBtn, connectionType === option.key && styles.typeBtnActive]}
+                            onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                setConnectionType(option.key);
+                            }}
+                        >
+                            <Text style={[styles.typeBtnText, connectionType === option.key && styles.typeBtnTextActive]}>{option.label}</Text>
+                        </Pressable>
+                    ))}
+                </View>
+
+                {connectionType === 'duo' && (
+                    <View style={{ marginBottom: 15 }}>
+                        <Text style={styles.label}>Bağlanacak Arkadaş</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', gap: 10, paddingVertical: 5 }}>
+                            {friends.map((f) => {
+                                const isSel = selectedFriendId === f.id;
+                                return (
+                                    <Pressable
+                                        key={f.id}
+                                        style={[
+                                            styles.friendChip,
+                                            isSel && styles.friendChipActive
+                                        ]}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setSelectedFriendId(isSel ? null : f.id);
+                                        }}
+                                    >
+                                        <Text style={[styles.friendChipText, isSel && styles.friendChipTextActive]}>{f.username}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                            {friends.length === 0 && (
+                                <Text style={{ color: '#999', fontSize: 13 }}>Hiç arkadaşınız bulunmuyor.</Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                )}
+
+                {connectionType === 'group' && (
+                    <View style={{ marginBottom: 15 }}>
+                        <Text style={styles.label}>Grup Adı</Text>
+                        <TextInput
+                            placeholder="Örn: Gym Buddies, Study Hard"
+                            style={styles.input}
+                            value={groupName}
+                            onChangeText={setGroupName}
+                        />
+
+                        <Text style={styles.label}>Gruba Eklenecek Arkadaşlar (En az 2 seçilmeli)</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 5 }}>
+                            {friends.map((f) => {
+                                const isSel = selectedFriendIds.includes(f.id);
+                                return (
+                                    <Pressable
+                                        key={f.id}
+                                        style={[
+                                            styles.friendChip,
+                                            isSel && styles.friendChipActive
+                                        ]}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            if (isSel) {
+                                                setSelectedFriendIds(selectedFriendIds.filter(id => id !== f.id));
+                                            } else {
+                                                setSelectedFriendIds([...selectedFriendIds, f.id]);
+                                            }
+                                        }}
+                                    >
+                                        <Text style={[styles.friendChipText, isSel && styles.friendChipTextActive]}>
+                                            {isSel ? '✓ ' : ''}{f.username}
+                                        </Text>
+                                    </Pressable>
+                                );
+                            })}
+                            {friends.length === 0 && (
+                                <Text style={{ color: '#999', fontSize: 13 }}>Hiç arkadaşınız bulunmuyor.</Text>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 <Pressable style={[styles.btn, { backgroundColor: '#ff7f50', marginTop: 20 }]} onPress={handleSaveHabit}>
                     <Text style={styles.btnText}>Create</Text>
                 </Pressable>
@@ -365,4 +498,26 @@ const styles = StyleSheet.create({
     weekdayPillActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
     weekdayText: { color: '#475569', fontWeight: '800', fontSize: 12 },
     weekdayTextActive: { color: '#fff' },
+    friendChip: {
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        backgroundColor: '#f8fafc',
+        marginRight: 8,
+        marginBottom: 8,
+    },
+    friendChipActive: {
+        backgroundColor: '#ff7f50',
+        borderColor: '#ff7f50',
+    },
+    friendChipText: {
+        fontSize: 14,
+        color: '#475569',
+        fontWeight: 'bold',
+    },
+    friendChipTextActive: {
+        color: '#fff',
+    },
 });

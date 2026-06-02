@@ -74,6 +74,15 @@ export default function Home({ navigation }) {
   const [habitType, setHabitType] = useState('count');
   const [timePickerVisible, setTimePickerVisible] = useState(false);
 
+  const [connections, setConnections] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [connectModalVisible, setConnectModalVisible] = useState(false);
+  const [selectedFriendId, setSelectedFriendId] = useState(null);
+  const [selectedFriendIds, setSelectedFriendIds] = useState([]);
+  const [groupName, setGroupName] = useState('');
+  const [connectType, setConnectType] = useState('duo'); // 'duo', 'group'
+
   // Stats
   const [statsModalVisible, setStatsModalVisible] = useState(false);
   const [activeStats, setActiveStats] = useState(null);
@@ -94,13 +103,88 @@ export default function Home({ navigation }) {
     }
   };
 
+  const fetchConnectionsAndGroups = async () => {
+    try {
+      const connRes = await axiosInstance.get('habits/connections/');
+      setConnections(unwrapPagination(connRes.data));
+    } catch (e) {
+      console.log('Error fetching connections:', e?.message);
+    }
+    try {
+      const grpRes = await axiosInstance.get('habits/groups/');
+      setGroups(unwrapPagination(grpRes.data));
+    } catch (e) {
+      console.log('Error fetching groups:', e?.message);
+    }
+  };
+
+  const fetchFriends = async () => {
+    try {
+      const res = await axiosInstance.get('friends/list/');
+      setFriends(unwrapPagination(res.data));
+    } catch (e) {
+      console.log('Error fetching friends:', e?.message);
+    }
+  };
+
+  const handleRespondConnection = async (connId, action) => {
+    try {
+      await axiosInstance.post(`habits/connections/${connId}/respond/`, { action });
+      await fetchHabits();
+      await fetchConnectionsAndGroups();
+    } catch (e) {
+      Alert.alert('Hata', 'İstek yanıtlanamadı.');
+    }
+  };
+
+  const handleConnectExistingHabit = async () => {
+    if (connectType === 'duo' && !selectedFriendId) {
+      Alert.alert('Hata', 'Lütfen bağlamak istediğiniz arkadaşı seçin.');
+      return;
+    }
+    if (connectType === 'group') {
+      if (!groupName.trim()) {
+        Alert.alert('Hata', 'Grup adı boş olamaz.');
+        return;
+      }
+      if (selectedFriendIds.length < 2) {
+        Alert.alert('Hata', 'En az 2 arkadaş seçmelisiniz.');
+        return;
+      }
+    }
+
+    try {
+      if (connectType === 'duo') {
+        await axiosInstance.post('habits/connections/create/', {
+          habit_id: habitForm.id,
+          friend_id: selectedFriendId
+        });
+        Alert.alert('Başarılı! 🎉', 'Ortak Alışkanlık daveti başarıyla gönderildi.');
+      } else {
+        await axiosInstance.post('habits/groups/create/', {
+          name: groupName,
+          habit_id: habitForm.id,
+          participant_ids: selectedFriendIds
+        });
+        Alert.alert('Başarılı! 🎉', 'Grup Alışkanlığı başarıyla oluşturuldu.');
+      }
+      setConnectModalVisible(false);
+      await fetchHabits();
+      await fetchConnectionsAndGroups();
+    } catch (e) {
+      Alert.alert('Hata', e.response?.data?.error || 'Bağlantı oluşturulamadı.');
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchHabits();
       fetchProfile();
+      fetchConnectionsAndGroups();
     });
     fetchHabits();
     fetchProfile();
+    fetchConnectionsAndGroups();
     return unsubscribe;
   }, [navigation]);
 
@@ -145,7 +229,7 @@ export default function Home({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchHabits();
+    await Promise.all([fetchHabits(), fetchProfile(), fetchConnectionsAndGroups()]);
     setRefreshing(false);
   };
 
@@ -337,14 +421,39 @@ export default function Home({ navigation }) {
     const theme = getThemeColor(item.color || item.id);
 
 
+    // Find matching Duo connection
+    const matchedDuo = connections.find(c => 
+      c.status === 'accepted' && (c.habit1_id === item.id || c.habit2_id === item.id)
+    );
+
+    // Find matching Group membership
+    const matchedGroup = groups.find(g => 
+      g.memberships && g.memberships.some(m => m.habit && m.habit.id === item.id)
+    );
+
     const isPast = toLocalDateString(currentDate) < toLocalDateString(new Date());
     const isFuture = toLocalDateString(currentDate) > toLocalDateString(new Date());
     const isToday = toLocalDateString(currentDate) === toLocalDateString(new Date());
-
+ 
     // Mask for Future
     const displayCount = isFuture ? 0 : (item.count || 0);
     const displayTime = isFuture ? '00:00' : (item.total_time || '00:00');
-    const displayStreak = isFuture ? (item.streak || 0) : (item.streak || 0);
+
+    // Streaks mapping
+    let displayStreak = item.streak || 0;
+    let habitSubText = '';
+    let isDuoOrGroup = false;
+
+    if (matchedDuo) {
+      displayStreak = matchedDuo.streak || 0;
+      const partner = matchedDuo.user1.id === profile?.id ? matchedDuo.user2 : matchedDuo.user1;
+      habitSubText = `Duo: @${partner.username}`;
+      isDuoOrGroup = true;
+    } else if (matchedGroup) {
+      displayStreak = matchedGroup.streak || 0;
+      habitSubText = `Grup: ${matchedGroup.name}`;
+      isDuoOrGroup = true;
+    }
 
     const isCompleted = (item.habit_type === 'count' && displayCount >= item.target_count) ||
       (item.habit_type === 'time' && displayTime >= item.target_time);
@@ -356,7 +465,7 @@ export default function Home({ navigation }) {
       if (hash > 4) return 'partial';
       return 'none';
     });
-
+ 
     return (
       <Pressable
         style={[styles.card, { backgroundColor: theme.bg, flexDirection: 'column', alignItems: 'stretch' }]}
@@ -385,6 +494,9 @@ export default function Home({ navigation }) {
                   </View>
                 )}
               </View>
+              {habitSubText ? (
+                <Text style={{ fontSize: 12, color: theme.text, opacity: 0.7, fontWeight: '700', marginBottom: 2 }}>{habitSubText}</Text>
+              ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {displayStreak > 0 ? (
                   <StreakFlame streak={displayStreak} size={26} showCount={false} style={{ marginRight: 4 }} />
@@ -396,6 +508,36 @@ export default function Home({ navigation }) {
                   {item.habit_type === 'count' ? `${displayCount}/${item.target_count}` : `${displayTime}/${item.target_time}`}
                 </Text>
               </View>
+
+              {/* Duo verification details */}
+              {matchedDuo && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 }}>
+                  <Text style={{ fontSize: 11, color: theme.text, opacity: 0.8, fontWeight: '700' }}>Tamamlayanlar: </Text>
+                  <View style={{ flexDirection: 'row', gap: 4 }}>
+                    <View style={[styles.avatarStatusBadge, { backgroundColor: matchedDuo.user1_verified_today ? '#10b981' : '#cbd5e1' }]}>
+                      <Text style={styles.avatarStatusText}>{matchedDuo.user1.username.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={[styles.avatarStatusBadge, { backgroundColor: matchedDuo.user2_verified_today ? '#10b981' : '#cbd5e1' }]}>
+                      <Text style={styles.avatarStatusText}>{matchedDuo.user2.username.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Group verification details */}
+              {matchedGroup && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 }}>
+                  <Text style={{ fontSize: 11, color: theme.text, opacity: 0.8, fontWeight: '700' }}>Tamamlayanlar: </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                    {matchedGroup.memberships.map((m) => (
+                      <View key={m.id} style={[styles.avatarStatusBadge, { backgroundColor: m.verified_today ? '#10b981' : '#cbd5e1' }]}>
+                        <Text style={styles.avatarStatusText}>{m.user.username.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               {/* Multiplier Badge */}
               {item.streak > 7 && (
                 <View style={styles.multiplierBadge}>
@@ -604,12 +746,51 @@ export default function Home({ navigation }) {
     );
   };
 
+  const pendingConnections = connections.filter(
+    c => c.status === 'pending' && c.user2?.id === profile?.id
+  );
+
+  const renderPendingInvites = () => {
+    if (pendingConnections.length === 0) return null;
+    return (
+      <View style={styles.invitesContainer}>
+        <Text style={styles.invitesHeader}>Ortak Alışkanlık İstekleri 🌱</Text>
+        {pendingConnections.map((conn) => (
+          <View key={conn.id} style={styles.inviteCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inviteText}>
+                <Text style={{ fontWeight: 'bold' }}>@{conn.user1.username}</Text> seninle{' '}
+                <Text style={{ fontWeight: 'bold', color: '#ff7f50' }}>{conn.habit_name}</Text>{' '}
+                alışkanlığını ortak takip etmek istiyor.
+              </Text>
+            </View>
+            <View style={styles.inviteActionRow}>
+              <Pressable
+                onPress={() => handleRespondConnection(conn.id, 'accept')}
+                style={[styles.inviteBtn, { backgroundColor: '#10b981' }]}
+              >
+                <Text style={styles.inviteBtnText}>Kabul Et</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleRespondConnection(conn.id, 'decline')}
+                style={[styles.inviteBtn, { backgroundColor: '#ef4444' }]}
+              >
+                <Text style={styles.inviteBtnText}>Reddet</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {renderShopModal()}
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderDopamineHeader()}
         {renderCalendarStrip()}
+        {renderPendingInvites()}
         <View style={styles.listContainer}>
           <FlatList data={habits} keyExtractor={i => i.id.toString()} renderItem={renderHabitCard} scrollEnabled={false}
             ListEmptyComponent={<EmptyState icon="leaf-outline" title="Henüz alışkanlık yok" message="Yeni bir alışkanlık eklemek için + butonuna bas" />}
@@ -683,6 +864,21 @@ export default function Home({ navigation }) {
               })}
             </View>
 
+            {/* Convert Solo habit to Duo or Group */}
+            {(!connections.some(c => c.status === 'accepted' && (c.habit1_id === habitForm.id || c.habit2_id === habitForm.id)) &&
+             !groups.some(g => g.memberships && g.memberships.some(m => m.habit && m.habit.id === habitForm.id))) && (
+              <Pressable
+                onPress={() => {
+                  setEditModalVisible(false);
+                  setConnectModalVisible(true);
+                  fetchFriends();
+                }}
+                style={[styles.btn, { backgroundColor: '#e0f2fe', marginTop: 10 }]}
+              >
+                <Text style={{ color: '#0369a1', fontWeight: 'bold' }}>Arkadaşla Bağla / Grup Yap 🥂</Text>
+              </Pressable>
+            )}
+
             <Pressable onPress={handleUpdateHabit} style={[styles.btn, { backgroundColor: '#007BFF', marginTop: 10 }]}>
               <Text style={{ color: '#fff', fontWeight: 'bold' }}>Güncelle</Text>
             </Pressable>
@@ -711,6 +907,101 @@ export default function Home({ navigation }) {
               ))}
             </View>
             <Pressable onPress={() => setShowMonthModal(false)} style={styles.btn}><Text>Kapat</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Connect Modal */}
+      <Modal visible={connectModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalHeader}>Ortak Alışkanlık Kur</Text>
+
+            <View style={styles.typeRow}>
+              {[
+                { key: 'duo', label: 'Duo 🥂' },
+                { key: 'group', label: 'Grup 👥' },
+              ].map((option) => (
+                <Pressable
+                  key={option.key}
+                  style={[styles.typeBtn, connectType === option.key && styles.typeBtnActive]}
+                  onPress={() => setConnectType(option.key)}
+                >
+                  <Text style={[styles.typeBtnText, connectType === option.key && styles.typeBtnTextActive]}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {connectType === 'duo' && (
+              <View style={{ marginBottom: 15 }}>
+                <Text style={styles.label}>Arkadaş Seçin</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', gap: 10, paddingVertical: 5 }}>
+                  {friends.map((f) => {
+                    const isSel = selectedFriendId === f.id;
+                    return (
+                      <Pressable
+                        key={f.id}
+                        style={[
+                          styles.friendChip,
+                          isSel && styles.friendChipActive
+                        ]}
+                        onPress={() => setSelectedFriendId(isSel ? null : f.id)}
+                      >
+                        <Text style={[styles.friendChipText, isSel && styles.friendChipTextActive]}>{f.username}</Text>
+                      </Pressable>
+                    );
+                  })}
+                  {friends.length === 0 && (
+                    <Text style={{ color: '#999', fontSize: 13 }}>Arkadaş bulunamadı.</Text>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+
+            {connectType === 'group' && (
+              <View style={{ marginBottom: 15 }}>
+                <Text style={styles.label}>Grup Adı</Text>
+                <TextInput
+                  placeholder="Grup adı yazın..."
+                  style={styles.input}
+                  value={groupName}
+                  onChangeText={setGroupName}
+                />
+
+                <Text style={styles.label}>Üyeleri Seçin (En az 2)</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 5 }}>
+                  {friends.map((f) => {
+                    const isSel = selectedFriendIds.includes(f.id);
+                    return (
+                      <Pressable
+                        key={f.id}
+                        style={[
+                          styles.friendChip,
+                          isSel && styles.friendChipActive
+                        ]}
+                        onPress={() => {
+                          if (isSel) {
+                            setSelectedFriendIds(selectedFriendIds.filter(id => id !== f.id));
+                          } else {
+                            setSelectedFriendIds([...selectedFriendIds, f.id]);
+                          }
+                        }}
+                      >
+                        <Text style={[styles.friendChipText, isSel && styles.friendChipTextActive]}>{f.username}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <Pressable onPress={handleConnectExistingHabit} style={[styles.btn, { backgroundColor: '#007BFF', marginTop: 10 }]}>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Bağlantıyı Başlat</Text>
+            </Pressable>
+
+            <Pressable onPress={() => setConnectModalVisible(false)} style={{ marginTop: 20, alignItems: 'center' }}>
+              <Text style={{ color: '#666' }}>İptal</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -819,5 +1110,90 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#334155',
+  },
+  invitesContainer: {
+    padding: 16,
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fef3c7',
+  },
+  invitesHeader: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#b45309',
+    marginBottom: 8,
+  },
+  inviteCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    shadowColor: '#b45309',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: 8,
+  },
+  inviteText: {
+    fontSize: 13,
+    color: '#78350f',
+    lineHeight: 18,
+  },
+  inviteActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  inviteBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  inviteBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 11,
+  },
+  avatarStatusBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  avatarStatusText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  friendChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  friendChipActive: {
+    backgroundColor: '#ff7f50',
+    borderColor: '#ff7f50',
+  },
+  friendChipText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  friendChipTextActive: {
+    color: '#fff',
   },
 });

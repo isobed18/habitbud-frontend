@@ -39,6 +39,11 @@ export default function SubmitProof({ route, navigation }) {
   const [includeStory, setIncludeStory] = useState(!!initialIsStory);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [connections, setConnections] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+
   const [sheetVisible, setSheetVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [sending, setSending] = useState(false);
@@ -52,10 +57,36 @@ export default function SubmitProof({ route, navigation }) {
   useEffect(() => {
     fetchHabits();
     fetchFriends();
+    fetchConnectionsAndGroups();
+    fetchProfile();
     return () => { if (undoTimer.current) clearTimeout(undoTimer.current); };
   }, []);
 
   useEffect(() => { if (habitId) setSelectedHabitId(habitId); }, [habitId]);
+
+  useEffect(() => {
+    if (!selectedHabitId || !profile) return;
+
+    const matchingDuo = connections.find(c => 
+      c.status === 'accepted' && (c.habit1_id === selectedHabitId || c.habit2_id === selectedHabitId)
+    );
+
+    const matchingGroup = groups.find(g => 
+      g.memberships && g.memberships.some(m => m.habit && m.habit.id === selectedHabitId)
+    );
+
+    if (matchingDuo) {
+      const partner = matchingDuo.user1.id === profile.id ? matchingDuo.user2 : matchingDuo.user1;
+      setSelectedFriends([partner.id]);
+      setSelectedGroupId(null);
+    } else if (matchingGroup) {
+      setSelectedGroupId(matchingGroup.id);
+      setSelectedFriends([]);
+    } else {
+      setSelectedFriends([]);
+      setSelectedGroupId(null);
+    }
+  }, [selectedHabitId, connections, groups, profile]);
 
   const fetchHabits = async () => {
     try {
@@ -68,6 +99,23 @@ export default function SubmitProof({ route, navigation }) {
       const r = await axiosInstance.get('friends/list/');
       setFriends(unwrapPagination(r.data));
     } catch (e) { console.log(e?.message); }
+  };
+  const fetchConnectionsAndGroups = async () => {
+    try {
+      const connRes = await axiosInstance.get('habits/connections/');
+      setConnections(unwrapPagination(connRes.data));
+    } catch (e) { console.log('Connections load error:', e?.message); }
+
+    try {
+      const grpRes = await axiosInstance.get('habits/groups/');
+      setGroups(unwrapPagination(grpRes.data));
+    } catch (e) { console.log('Groups load error:', e?.message); }
+  };
+  const fetchProfile = async () => {
+    try {
+      const res = await axiosInstance.get('users/api/profile/');
+      setProfile(res.data);
+    } catch (e) { console.log('Error fetching profile:', e?.message); }
   };
 
   const takePhoto = async () => {
@@ -100,8 +148,8 @@ export default function SubmitProof({ route, navigation }) {
 
   // Single action: share to story (optional) + selected friends, then offer undo.
   const doShare = async () => {
-    if (!includeStory && selectedFriends.length === 0) {
-      Alert.alert('Seçim yok', 'Hikayene ekle veya en az bir arkadaş seç.');
+    if (!includeStory && selectedFriends.length === 0 && !selectedGroupId) {
+      Alert.alert('Seçim yok', 'Hikayene ekle, bir arkadaş seç veya grup seç.');
       return;
     }
     setSending(true);
@@ -116,22 +164,35 @@ export default function SubmitProof({ route, navigation }) {
         result.storyId = r.data?.id || null;
       }
 
-      const checkResponses = await Promise.all(
-        selectedFriends.map((friendId) => {
+      if (selectedGroupId) {
+        const matchedGroupObj = groups.find(g => g.id === selectedGroupId);
+        if (matchedGroupObj && matchedGroupObj.conversation_id) {
           const fd = new FormData();
           fd.append('habit_id', selectedHabitId);
-          fd.append('friend_id', friendId);
+          fd.append('conversation_id', matchedGroupObj.conversation_id);
           fd.append('proof_image', imageFormPart('check.jpg'));
-          fd.append('content', content || 'Check 📸');
-          return axiosInstance.post('chat/checks/submit/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        })
-      );
-      result.checkIds = checkResponses.map((r) => r.data?.id).filter(Boolean);
+          fd.append('content', content || 'Grup Check-in 👥');
+          const r = await axiosInstance.post('chat/checks/submit/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          result.checkIds.push(r.data?.id);
+        }
+      } else {
+        const checkResponses = await Promise.all(
+          selectedFriends.map((friendId) => {
+            const fd = new FormData();
+            fd.append('habit_id', selectedHabitId);
+            fd.append('friend_id', friendId);
+            fd.append('proof_image', imageFormPart('check.jpg'));
+            fd.append('content', content || 'Check 📸');
+            return axiosInstance.post('chat/checks/submit/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          })
+        );
+        result.checkIds = checkResponses.map((r) => r.data?.id).filter(Boolean);
+      }
 
       haptics.success();
       setSheetVisible(false);
       setSending(false);
-      if (selectedFriends.length > 0) setPlaneKey((k) => k + 1); // paper-plane swoosh
+      if (selectedFriends.length > 0 || selectedGroupId) setPlaneKey((k) => k + 1); // paper-plane swoosh
       startUndo(result);
     } catch (e) {
       setSending(false);
@@ -261,33 +322,60 @@ export default function SubmitProof({ route, navigation }) {
 
             <View style={styles.divider} />
 
-            <View style={styles.searchBar}>
-              <Ionicons name="search" size={18} color="#999" />
-              <TextInput style={styles.searchInput} placeholder="Arkadaş ara..." value={searchQuery} onChangeText={setSearchQuery} />
-            </View>
-
             <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled">
-              {filteredFriends.map((f) => {
-                const isSel = selectedFriends.includes(f.id);
-                return (
-                  <Pressable key={f.id} style={styles.friendRow} onPress={() => toggleFriend(f.id)}>
-                    <View style={styles.friendAvatar}><Text style={styles.friendAvatarText}>{f.username.charAt(0).toUpperCase()}</Text></View>
-                    <Text style={styles.friendName}>{f.username}</Text>
-                    <View style={[styles.checkbox, isSel && styles.checkboxActive]}>
-                      {isSel && <Ionicons name="checkmark" size={16} color="#fff" />}
-                    </View>
-                  </Pressable>
+              {(() => {
+                const matchingDuo = connections.find(c => 
+                  c.status === 'accepted' && (c.habit1_id === selectedHabitId || c.habit2_id === selectedHabitId)
                 );
-              })}
-              {filteredFriends.length === 0 && (
-                <Text style={{ color: '#999', textAlign: 'center', marginVertical: 16 }}>Arkadaş bulunamadı.</Text>
-              )}
+
+                const matchingGroup = groups.find(g => 
+                  g.memberships && g.memberships.some(m => m.habit && m.habit.id === selectedHabitId)
+                );
+
+                if (matchingDuo) {
+                  const partner = matchingDuo.user1.id === profile?.id ? matchingDuo.user2 : matchingDuo.user1;
+                  return (
+                    <View style={styles.friendRow}>
+                      <View style={[styles.friendAvatar, { backgroundColor: '#10b981' }]}><Text style={styles.friendAvatarText}>{partner.username.charAt(0).toUpperCase()}</Text></View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.friendName}>{partner.username}</Text>
+                        <Text style={{ fontSize: 11, color: '#10b981', fontWeight: 'bold' }}>Ortak Alışkanlık Ortağı 🥂</Text>
+                      </View>
+                      <View style={[styles.checkbox, styles.checkboxActive]}>
+                        <Ionicons name="checkmark" size={16} color="#fff" />
+                      </View>
+                    </View>
+                  );
+                } else if (matchingGroup) {
+                  return (
+                    <View style={styles.friendRow}>
+                      <View style={[styles.friendAvatar, { backgroundColor: '#8b5cf6' }]}><Text style={styles.friendAvatarText}>G</Text></View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.friendName}>{matchingGroup.name}</Text>
+                        <Text style={{ fontSize: 11, color: '#8b5cf6', fontWeight: 'bold' }}>Grup Alışkanlığı 👥</Text>
+                      </View>
+                      <View style={[styles.checkbox, styles.checkboxActive]}>
+                        <Ionicons name="checkmark" size={16} color="#fff" />
+                      </View>
+                    </View>
+                  );
+                } else {
+                  return (
+                    <View style={{ padding: 15, alignItems: 'center' }}>
+                      <Ionicons name="lock-closed" size={24} color="#f59e0b" style={{ marginBottom: 6 }} />
+                      <Text style={{ fontSize: 13, color: '#b45309', textAlign: 'center', lineHeight: 18, fontWeight: '700' }}>
+                        Bu solo bir alışkanlık. Karşılıklı doğrulamalı serileri başlatmak için ana sayfada bu alışkanlığı arkadaşınızla bağlayın!
+                      </Text>
+                    </View>
+                  );
+                }
+              })()}
             </ScrollView>
 
             <Pressable
-              style={[styles.sendBtn, (sending || (!includeStory && selectedFriends.length === 0)) && styles.disabledBtn]}
+              style={[styles.sendBtn, (sending || (!includeStory && selectedFriends.length === 0 && !selectedGroupId)) && styles.disabledBtn]}
               onPress={doShare}
-              disabled={sending || (!includeStory && selectedFriends.length === 0)}
+              disabled={sending || (!includeStory && selectedFriends.length === 0 && !selectedGroupId)}
             >
               {sending ? <ActivityIndicator color="#fff" /> : (
                 <>
