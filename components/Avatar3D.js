@@ -9,10 +9,11 @@ import { View, ActivityIndicator, Text, StyleSheet, PanResponder } from 'react-n
 import * as FileSystem from 'expo-file-system';
 import { getImageUrl } from '../services/axiosInstance';
 
-let Canvas, useFrame, useGLTF;
+let Canvas, useFrame, useGLTF, THREE;
 try {
   ({ Canvas, useFrame } = require('@react-three/fiber/native'));
   ({ useGLTF } = require('@react-three/drei/native'));
+  THREE = require('three');
 } catch (_) { /* 3D libs unavailable */ }
 
 // Approximate attach points in the avatar's local space (model ~2 units tall).
@@ -82,16 +83,32 @@ function ItemMesh({ item, baseScale }) {
 function Model({ localUri, scale, rot, equippedItems }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
+  const mixer = useMemo(() => {
+    if (!THREE || !gltf.animations?.length) return null;
+    return new THREE.AnimationMixer(scene);
+  }, [gltf.animations, scene]);
   const ref = useRef();
   const cur = useRef({ y: 0, x: 0 });
-  useFrame(() => {
+  useEffect(() => {
+    if (!mixer || !gltf.animations?.length) return undefined;
+    gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
+    return () => mixer.stopAllAction();
+  }, [gltf.animations, mixer]);
+  useFrame(({ clock }, delta) => {
     if (!ref.current) return;
+    if (mixer) mixer.update(delta);
     const r = rot.current;
     if (!r.dragging) { r.y += r.vy; r.vy *= 0.94; if (Math.abs(r.vy) < 0.0004) r.vy = 0; }
     cur.current.y += (r.y - cur.current.y) * 0.18;
     cur.current.x += (r.x - cur.current.x) * 0.18;
-    ref.current.rotation.y = cur.current.y;
-    ref.current.rotation.x = cur.current.x;
+    const t = clock.getElapsedTime();
+    const idleBreath = 1 + Math.sin(t * 2.1) * 0.018;
+    const idleBounce = Math.sin(t * 2.4) * 0.025;
+    const idleTilt = Math.sin(t * 1.35) * 0.045;
+    ref.current.rotation.y = cur.current.y + idleTilt;
+    ref.current.rotation.x = cur.current.x + Math.sin(t * 1.6) * 0.018;
+    ref.current.position.y = idleBounce;
+    ref.current.scale.setScalar(idleBreath);
   });
   return (
     <group ref={ref}>
