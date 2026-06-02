@@ -1,15 +1,27 @@
-# Habit Tracker - React Native Mobil Uygulaması
+# HabitBud 🌱 - React Native Mobil Uygulaması
 
-Bu proje, React Native (Expo) ve Django backend kullanılarak geliştirilmiş sosyal bir habit takip uygulamasıdır.
+Bu proje, React Native (Expo) ve Django backend kullanılarak geliştirilmiş, 3B avatar entegrasyonlu ve sosyal doğrulamalı bir alışkanlık takip (habit tracking) mobil uygulamasıdır.
 
-Bu, Habit Tracker projesinin frontend (mobil uygulama) kısmıdır.
+## 🌟 Öne Çıkan UI/UX Özellikleri
 
-## Özellikler
-- Sosyal alışkanlık takibi
-- Fotoğrafla doğrulama sistemi
-- Başarım ve ödül sistemi
-- Avatar özelleştirme
-- Arkadaşlarla alışkanlıkları doğrulama sistemi
+- **🐻 3B Avatar Tasarım Stüdyosu (`AvatarStudio.js` & `Avatar3D.js`)**:
+  - **Expo GL** ve **React Three Fiber (R3F)** teknolojileriyle güçlendirilmiş entegre 3B model görüntüleyici.
+  - **Plushify Shading Filtresi**: Modellerdeki pürüzleri ve metalik yansımaları otomatik sönümleyerek (roughness: `0.85`, metalness: `0`) ve normal haritalarını hesaplayarak maskotlara pürüzsüz, yumuşak kadifemsi bir "oyuncak peluş" görünümü kazandırır.
+  - **Eylemsizlik (Inertia) Bazlı Döndürme**: PanResponder ile sürüklenen model, parmak bırakıldığında hıza bağlı olarak kaymaya ve yumuşak şekilde durmaya devam eder (sönümleme çarpanı `0.94`).
+  - **Canlı Nefes ve Sallanma Efektleri**: Karakterler boşta dururken nefes alma (`Math.sin` dalgalı boyut değişimi), zıplama ve kafa eğme hareketleri sergiler.
+  - **Akıllı Bağlantı Noktaları (Anchors)**: Alınan aksesuarları (şapka, kulaklık, dambıl, asa) modelin lokal alanındaki ilgili noktalara (`head`, `face`, `hand`, `back`, `neck`) yerleştirir.
+- **✨ Mikro-ödül Efektleri (`RewardOverlay.js`)**:
+  - **Uçan Ödül Çipleri**: Kazanılan ödülleri animasyonlu kartlar halinde (`+15 XP` amber mavi gölgeli, `+5 💎` neon cyan gölgeli) yay fiziği ve kuadratik sönümleme ile ekranın sağ altından yukarı doğru uçurur.
+  - **Pulsing Toplam Sayaçları**: Çipler yok olduğunda XP ve Elmas göstergelerini yay fiziğiyle büyüterek (`scale: 1.25` spring) güncellemeyi vurgular.
+  - **Kutlama Konfetisi**: Görev tamamlanma anında tam ekran Lottie konfeti şelalesi oynatır.
+- **🎬 Lottie Animasyon Entegrasyonu**:
+  - `success.json` (günlük check-in onay işareti), `fire.json` (canlı yanan seri ateşi), `trophy_unlock.json`/`badge_unlock.json` (başarımlar ve kilit açılma anları).
+- **📳 Zengin Dokunsal Geri Bildirim (Haptics)**:
+  - Alışkanlık tamamlama, eşya takıp çıkarma, kaydetme başarı veya hatalarında farklı titreşim profilleri (`light`, `medium`, `success`, `error`, `selection`) kullanılır.
+- **📸 Snapchat Tarzı Kanıt Gönderimi ve Geri Al Barı (`SubmitProof.js`)**:
+  - Kamera ve galeriden kanıt görseli yükleme, **4.5 saniyelik görsel Geri Al (Undo) sayacı** ile gönderimi son anda iptal edebilme imkanı.
+- **💬 Profil Bağlantılı Sohbet (`Chat.js`)**:
+  - Kullanıcı avatarlarına ve sohbet başlıklarına tıklandığında anında o kişinin alışkanlık profil sayfasına yönlendiren Snapchat/Instagram tarzı sohbet ekranı.
 
 ## Ön Gereksinimler
 - Node.js (v14 veya üzeri)

@@ -1,7 +1,30 @@
-# HabitBud 🌱
+# HabitBud 🌱 - Frontend Mobile App
+
+This repository contains the **React Native (Expo)** client application for HabitBud, featuring premium gamified user interfaces, 3D avatar customization, and real-time social loops.
+
+## 🌟 Core UI/UX Features
+
+- **🐻 3D Avatar Studio (`AvatarStudio.js` & `Avatar3D.js`)**:
+  - Immersive 3D interactive viewer utilizing **Expo GL** and **React Three Fiber (R3F)** to render generated animal characters (`.glb`).
+  - **Plushify Material Processor**: Dynamically filters materials (roughness `0.85`, metalness `0`) and recalculates vertex normals to generate high-quality matte animal meshes under virtual studio lighting.
+  - **Inertial Rotation**: Drag-to-rotate gesture handler with a custom PanResponder that lets the 3D model drift and settle naturally according to spin velocity.
+  - **Natural Idle Sways**: Dynamic sine-wave sways simulating breathing, bouncing, and neck tilt.
+  - **Attachment Anchors**: Accessories (beanies, wands, badges, glasses) placed precisely on local points (`head`, `face`, `hand`, `back`, `neck`) based on inventory purchases.
+- **✨ Micro-animations & Visual Rewards (`RewardOverlay.js`)**:
+  - **Floating Reward Chips**: Sprung-animated notifications flying out of actions (`+15 XP` in amber, `+5 💎` in premium cyan) using spring physics and quadratic easing curves.
+  - **Pulsing Totals**: XP and Diamond indicators at the bottom right pulse with spring scales when new coins or experience are added.
+  - **Milestone Confetti**: Fullscreen celebration bursts utilizing the `confetti.json` Lottie layer.
+- **🎬 Rich Lottie Animations**:
+  - `success.json` (animated checkmark for daily completions), `fire.json` (streak flame loop), `trophy_unlock.json`/`badge_unlock.json` (achievements and milestone triggers).
+- **📳 Haptic Micro-feedbacks**:
+  - Multi-tier haptics (`light`, `medium`, `success`, `error`, `selection`) mapped to inputs like incrementing counts, model selections, saving configurations, and error handlers.
+- **📸 Snapchat-like Proof Submit & Undo Bar (`SubmitProof.js`)**:
+  - Camera/gallery upload interface with a **4.5-second Undo countdown bar** to easily recall or cancel check-in submissions.
+- **💬 Profile-Linked Messengers**:
+  - Premium messaging layout (`Chat.js`) where clicking on users' avatar/chat headers redirects you instantly to their public statistics and habits profile page.
 
 > [!IMPORTANT]
-> This repository contains the **Frontend** code for HabitBud. For the project introduction, features description, and the **Backend** implementation, please visit the [habitbud-backend](https://github.com/isobed18/habitbud-backend) repository.
+> For the **Backend** implementation, database seeds, and ASGI setups, please visit the [habitbud-backend](https://github.com/isobed18/habitbud-backend) repository.
 
 ## 🛠️ Installation
 

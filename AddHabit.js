@@ -18,8 +18,28 @@ const getThemeColor = (index) => {
     return getHabitColor(index);
 };
 
+const WEEKDAYS = [
+    { key: 0, label: 'Pzt' },
+    { key: 1, label: 'Sal' },
+    { key: 2, label: 'Car' },
+    { key: 3, label: 'Per' },
+    { key: 4, label: 'Cum' },
+    { key: 5, label: 'Cmt' },
+    { key: 6, label: 'Paz' },
+];
+
 export default function AddHabit({ navigation }) {
-    const [habitForm, setHabitForm] = useState({ name: '', habit_type: 'count', target_count: '', target_time: '', frequency: 'daily', colorIndex: 0 });
+    const [habitForm, setHabitForm] = useState({
+        name: '',
+        habit_type: 'count',
+        target_count: '',
+        target_time: '',
+        frequency: 'daily',
+        colorIndex: 0,
+        schedule_type: 'daily',
+        schedule_weekdays: '',
+        schedule_target_count: '1',
+    });
     const [habitType, setHabitType] = useState('count');
     const [timePickerVisible, setTimePickerVisible] = useState(false);
     const [templates, setTemplates] = useState([]);
@@ -45,13 +65,43 @@ export default function AddHabit({ navigation }) {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     };
 
+    const buildSchedulePayload = () => {
+        const scheduleType = habitForm.schedule_type || 'daily';
+        const scheduleTarget = parseInt(habitForm.schedule_target_count, 10) || 1;
+        return {
+            frequency: scheduleType === 'weekly_count' ? 'weekly' : (scheduleType === 'monthly_count' ? 'monthly' : 'daily'),
+            schedule_type: scheduleType,
+            schedule_weekdays: scheduleType === 'specific_weekdays' ? habitForm.schedule_weekdays : '',
+            schedule_target_count: scheduleType === 'weekly_count'
+                ? Math.max(1, Math.min(scheduleTarget, 7))
+                : scheduleType === 'monthly_count'
+                    ? Math.max(1, Math.min(scheduleTarget, 31))
+                    : 1,
+        };
+    };
+
+    const toggleWeekday = (day) => {
+        const current = new Set(String(habitForm.schedule_weekdays || '').split(',').filter(Boolean).map(Number));
+        if (current.has(day)) current.delete(day);
+        else current.add(day);
+        setHabitForm({ ...habitForm, schedule_weekdays: Array.from(current).sort((a, b) => a - b).join(',') });
+    };
+
     const handleSaveHabit = async () => {
         if (!habitForm.name.trim()) { Alert.alert('Hata', 'İsim gerekli'); return; }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            const habitData = { ...habitForm, habit_type: habitType, color: habitForm.colorIndex };
-            if (habitType === 'count') habitData.target_count = parseInt(habitForm.target_count);
-            else habitData.target_time = typeof habitForm.target_time === 'string' ? habitForm.target_time : formatSecondsToTime(habitForm.target_time);
+            const habitData = { ...habitForm, ...buildSchedulePayload(), habit_type: habitType, color: habitForm.colorIndex };
+            if (habitType === 'count') {
+                habitData.target_count = Math.max(1, parseInt(habitForm.target_count, 10) || 1);
+                habitData.target_time = null;
+            } else if (habitType === 'time') {
+                habitData.target_count = null;
+                habitData.target_time = typeof habitForm.target_time === 'string' ? habitForm.target_time : formatSecondsToTime(habitForm.target_time);
+            } else {
+                habitData.target_count = 1;
+                habitData.target_time = null;
+            }
 
             await axiosInstance.post('habits/', habitData);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -77,6 +127,9 @@ export default function AddHabit({ navigation }) {
                 frequency: tpl.default_frequency || 'daily',
                 target_count: tpl.habit_type === 'count' ? (tpl.default_target_count || 1) : null,
                 target_time: tpl.habit_type === 'time' ? formatSecondsToTime(tpl.default_target_count || 600) : null,
+                schedule_type: tpl.default_frequency === 'weekly' ? 'weekly_count' : (tpl.default_frequency === 'monthly' ? 'monthly_count' : 'daily'),
+                schedule_weekdays: '',
+                schedule_target_count: 1,
                 // Tells the backend to auto-create a habit-aware reminder.
                 template_slug: tpl.slug,
             };
