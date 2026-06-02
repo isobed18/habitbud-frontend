@@ -18,9 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
+import EmptyState from './components/EmptyState';
 import { haptics } from './utils/feedback';
-let LottieView = null; let HEART_SRC = null;
-try { LottieView = require('lottie-react-native').default; HEART_SRC = require('./assets/lottie/heartlike_burst.json'); } catch (_) {}
+let LottieView = null; let HEART_SRC = null; let EMPTY_CHAT_SRC = null;
+try {
+  LottieView = require('lottie-react-native').default;
+  HEART_SRC = require('./assets/lottie/heartlike_burst.json');
+  EMPTY_CHAT_SRC = require('./assets/lottie/empty_inbox.json');
+} catch (_) {}
 
 const { width } = Dimensions.get('window');
 
@@ -315,10 +320,13 @@ export default function Conversations({ navigation }) {
         contentContainerStyle={{ padding: 15, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={50} color="#ccc" />
-            <Text style={styles.emptyText}>Henüz sohbet yok</Text>
-          </View>
+          <EmptyState
+            lottie={EMPTY_CHAT_SRC}
+            icon="chatbubbles-outline"
+            title="Henüz sohbet yok"
+            message="Bir arkadaşına check gönder, sohbet burada başlasın!"
+            lottieSize={150}
+          />
         }
       />
 

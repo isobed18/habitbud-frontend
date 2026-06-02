@@ -8,6 +8,9 @@ import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { haptics } from './utils/feedback';
 import Avatar from './components/Avatar';
+import EmptyState from './components/EmptyState';
+let NOTFOUND_SRC = null;
+try { NOTFOUND_SRC = require('./assets/lottie/notfound_sadscope.json'); } catch (_) {}
 
 export default function Search({ navigation }) {
   const [query, setQuery] = useState('');
@@ -84,7 +87,8 @@ export default function Search({ navigation }) {
           )}
           ListEmptyComponent={
             searched ? (
-              <Text style={styles.empty}>Sonuç bulunamadı.</Text>
+              <EmptyState lottie={NOTFOUND_SRC} icon="search-outline" title="Sonuç yok"
+                          message="Bu isimde kullanıcı bulamadık." lottieSize={180} />
             ) : (
               <Text style={styles.empty}>En az 2 harf yaz, kullanıcıları ara.</Text>
             )

@@ -2,12 +2,19 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function EmptyState({ icon = 'leaf-outline', title, message, children }) {
+let LottieView = null;
+try { LottieView = require('lottie-react-native').default; } catch (_) {}
+
+export default function EmptyState({ icon = 'leaf-outline', title, message, lottie, lottieSize = 160, children }) {
     return (
         <View style={styles.container}>
-            <View style={styles.iconCircle}>
-                <Ionicons name={icon} size={40} color="#667eea" />
-            </View>
+            {lottie && LottieView ? (
+                <LottieView source={lottie} autoPlay loop style={{ width: lottieSize, height: lottieSize, marginBottom: 8 }} />
+            ) : (
+                <View style={styles.iconCircle}>
+                    <Ionicons name={icon} size={40} color="#667eea" />
+                </View>
+            )}
             <Text style={styles.title}>{title}</Text>
             {message && <Text style={styles.message}>{message}</Text>}
             {children && <View style={styles.actions}>{children}</View>}
