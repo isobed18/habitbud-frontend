@@ -14,6 +14,8 @@ import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import EmptyState from './components/EmptyState';
+let BELL_SRC = null;
+try { BELL_SRC = require('./assets/lottie/notification_bell.json'); } catch (_) {}
 
 const TYPE_CONFIG = {
     friend_request: { icon: 'person-add', color: '#3b82f6', bg: '#eff6ff' },
@@ -142,9 +144,11 @@ export default function Notifications({ navigation }) {
                 }
                 ListEmptyComponent={
                     <EmptyState
+                        lottie={BELL_SRC}
                         icon="notifications-off-outline"
                         title="Bildirim yok"
-                        message="Henüz bildiriminiz bulunmuyor"
+                        message="Hepsini gördün! Yeni bildirimler burada belirir."
+                        lottieSize={150}
                     />
                 }
             />

@@ -19,6 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { unwrapPagination } from './utils/api';
 import { reward, haptics } from './utils/feedback';
 import LevelUpModal from './components/LevelUpModal';
+let LottieView = null; let TYPING_SRC = null;
+try { LottieView = require('lottie-react-native').default; TYPING_SRC = require('./assets/lottie/typing_grey.json'); } catch (_) {}
 import Avatar from './components/Avatar';
 
 export default function Chat({ route, navigation }) {
@@ -498,6 +500,9 @@ export default function Chat({ route, navigation }) {
 
       {isTyping && typingUser && (
         <View style={styles.typingIndicator}>
+          {LottieView && TYPING_SRC ? (
+            <LottieView source={TYPING_SRC} autoPlay loop style={{ width: 44, height: 24 }} />
+          ) : null}
           <Text style={styles.typingText}>{typingUser} yazıyor...</Text>
         </View>
       )}
@@ -753,8 +758,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   typingIndicator: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
     backgroundColor: '#f1f5f9',
     borderRadius: 16,
     alignSelf: 'flex-start',
