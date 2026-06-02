@@ -390,7 +390,7 @@ export default function Home({ navigation }) {
                     console.error('INCREMENT ERROR:', e);
                   }
                 } else {
-                  Alert.alert('Zamanlayıcı', 'Henüz aktif değil');
+                  openTimerModal(item);
                 }
               }
             }}
@@ -559,6 +559,32 @@ export default function Home({ navigation }) {
         </View>
       </ScrollView>
 
+      <Modal visible={timerModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.timerModalContent}>
+            <Text style={styles.modalHeader}>{timerHabit?.name || 'Timer'}</Text>
+            <Text style={styles.timerValue}>{formatSecondsToTime(timerSeconds)}</Text>
+            <Text style={styles.timerSubText}>Today: {timerHabit?.total_time || '00:00:00'} / {timerHabit?.target_time || '00:00:00'}</Text>
+            <View style={styles.timerButtonRow}>
+              <Pressable style={[styles.timerActionBtn, { backgroundColor: timerRunning ? '#f59e0b' : '#10b981' }]} onPress={() => setTimerRunning((v) => !v)}>
+                <Ionicons name={timerRunning ? 'pause' : 'play'} size={20} color="#fff" />
+                <Text style={styles.timerActionText}>{timerRunning ? 'Pause' : 'Start'}</Text>
+              </Pressable>
+              <Pressable style={[styles.timerActionBtn, { backgroundColor: '#e2e8f0' }]} onPress={() => setTimerSeconds(0)}>
+                <Ionicons name="refresh" size={20} color="#334155" />
+                <Text style={[styles.timerActionText, { color: '#334155' }]}>Reset</Text>
+              </Pressable>
+            </View>
+            <Pressable style={[styles.btn, { backgroundColor: '#111827', marginTop: 16 }]} onPress={finishTimerSession}>
+              <Text style={{ color: '#fff', fontWeight: '800' }}>Save Session</Text>
+            </Pressable>
+            <Pressable onPress={() => { setTimerRunning(false); setTimerModalVisible(false); }} style={{ marginTop: 16, alignItems: 'center' }}>
+              <Text style={{ color: '#666' }}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Edit Modal */}
       <Modal visible={editModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -656,6 +682,12 @@ const styles = StyleSheet.create({
   actionButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: '#fff', borderRadius: 20, padding: 25 },
+  timerModalContent: { width: '85%', backgroundColor: '#fff', borderRadius: 20, padding: 25, alignItems: 'stretch' },
+  timerValue: { fontSize: 44, fontWeight: '900', color: '#111827', textAlign: 'center', marginBottom: 8 },
+  timerSubText: { color: '#64748b', textAlign: 'center', fontWeight: '700', marginBottom: 18 },
+  timerButtonRow: { flexDirection: 'row', gap: 10 },
+  timerActionBtn: { flex: 1, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 12 },
+  timerActionText: { color: '#fff', fontWeight: '900' },
   modalHeader: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
   input: { backgroundColor: '#f9f9f9', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#eee' },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 5, color: '#444' },
