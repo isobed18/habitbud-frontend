@@ -1,10 +1,14 @@
 import axios from 'axios';
+import Constants from 'expo-constants';
 import { getAccessToken, getRefreshToken, saveTokens, removeTokens } from '../utils/auth';
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
-export const BASE_URL = 'http://192.168.1.8:8000/';
+// API base URL: set per build via app.json `expo.extra.apiUrl` (or EAS env).
+// Falls back to the LAN dev server for local development.
+const extra = Constants?.expoConfig?.extra || Constants?.manifest?.extra || {};
+export const BASE_URL = (extra.apiUrl || 'http://192.168.1.8:8000/').replace(/\/?$/, '/');
 
 export const getImageUrl = (url) => {
     if (!url) return null;

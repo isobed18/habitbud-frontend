@@ -29,7 +29,8 @@
     "extra": {
       "eas": {
         "projectId": "78a11ba5-d912-498c-bfb5-8ca37b96c1f4"
-      }
+      },
+      "apiUrl": "http://192.168.1.8:8000/"
     },
     "owner": "isobed18",
     "plugins": [
