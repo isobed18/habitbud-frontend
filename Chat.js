@@ -1,18 +1,16 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
-  FlatList,
-  TextInput,
   Pressable,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Image,
   Modal,
   ScrollView,
 } from 'react-native';
+import { GiftedChat, Bubble, Composer, InputToolbar, Send, Actions } from 'react-native-gifted-chat';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,7 +35,6 @@ export default function Chat({ route, navigation }) {
   const [levelUp, setLevelUp] = useState(null);
   const [wsEnabled, setWsEnabled] = useState(true);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const flatListRef = useRef(null);
   const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
   const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
@@ -215,15 +212,16 @@ export default function Chat({ route, navigation }) {
     }
   };
 
-  const sendMessage = async () => {
-    if (!inputText.trim()) return;
+  const sendMessage = async (textOverride) => {
+    const messageText = (textOverride ?? inputText).trim();
+    if (!messageText) return;
 
     // Send via WebSocket if connected
     if (ws && ws.readyState === WebSocket.OPEN && wsEnabled) {
       try {
         ws.send(JSON.stringify({
           type: 'chat_message',
-          content: inputText.trim(),
+          content: messageText,
         }));
         setInputText('');
         return;
@@ -236,7 +234,7 @@ export default function Chat({ route, navigation }) {
     // Use HTTP API (fallback or primary if WebSocket disabled)
     try {
       await axiosInstance.post(`chat/conversations/${conversationId}/messages/create/`, {
-        content: inputText.trim(),
+        content: messageText,
       });
       setInputText('');
       fetchMessages();
@@ -275,9 +273,7 @@ export default function Chat({ route, navigation }) {
   };
 
   const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    // GiftedChat handles scroll positioning internally.
   };
 
   const verifyProof = async (messageId, action) => {
@@ -349,6 +345,151 @@ export default function Chat({ route, navigation }) {
     if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const giftedMessages = useMemo(() => {
+    return [...messages]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((msg) => ({
+        _id: msg.id,
+        text: msg.message_type === 'PROOF' ? (msg.content || '') : (msg.content || ''),
+        createdAt: new Date(msg.created_at),
+        user: {
+          _id: msg.sender?.id,
+          name: msg.sender?.username,
+          avatar: msg.sender?.avatar ? getImageUrl(msg.sender.avatar) : undefined,
+        },
+        image: msg.message_type === 'PROOF' && msg.proof_image ? getImageUrl(msg.proof_image) : undefined,
+        raw: msg,
+      }));
+  }, [messages]);
+
+  const updateInputText = (text) => {
+    setInputText(text);
+    handleInputChange(text);
+  };
+
+  const renderProofCard = (giftedMessage) => {
+    const item = giftedMessage.raw;
+    const isMyMessage = currentUserId && item.sender?.id === currentUserId;
+    const canVerify = !isMyMessage && item.message_type === 'PROOF' && item.verification_status === 'PENDING';
+
+    return (
+      <View style={[styles.proofCard, isMyMessage ? styles.myProofCard : styles.otherProofCard]}>
+        {item.proof_image && (
+          <Image
+            source={{ uri: getImageUrl(item.proof_image) }}
+            style={styles.proofImage}
+            resizeMode="cover"
+          />
+        )}
+        {item.content && (
+          <Text style={[styles.proofCaption, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+            {item.content}
+          </Text>
+        )}
+        <View style={[
+          styles.proofStatusContainer,
+          item.verification_status === 'VERIFIED' && styles.statusVerified,
+          item.verification_status === 'REJECTED' && styles.statusRejected,
+          item.verification_status === 'PENDING' && styles.statusPending,
+        ]}>
+          <Text style={styles.proofStatusText}>
+            {item.verification_status === 'VERIFIED' && '✓ Doğrulandı'}
+            {item.verification_status === 'REJECTED' && '✗ Reddedildi'}
+            {item.verification_status === 'PENDING' && '⏳ Beklemede'}
+          </Text>
+        </View>
+        {canVerify && (
+          <View style={styles.verifyButtons}>
+            <Pressable
+              style={[styles.verifyButton, styles.verifyAcceptButton]}
+              onPress={() => verifyProof(item.id, 'verify')}
+            >
+              <Ionicons name="checkmark-circle" size={14} color="#fff" />
+              <Text style={styles.verifyButtonText}>Doğrula</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.verifyButton, styles.verifyRejectButton]}
+              onPress={() => verifyProof(item.id, 'reject')}
+            >
+              <Ionicons name="close-circle" size={14} color="#fff" />
+              <Text style={styles.verifyButtonText}>Reddet</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderGiftedBubble = (props) => {
+    const raw = props.currentMessage?.raw;
+    if (raw?.message_type === 'PROOF') {
+      return renderProofCard(props.currentMessage);
+    }
+
+    return (
+      <Bubble
+        {...props}
+        wrapperStyle={{
+          right: styles.giftedMyBubble,
+          left: styles.giftedOtherBubble,
+        }}
+        textStyle={{
+          right: styles.myMessageText,
+          left: styles.otherMessageText,
+        }}
+        timeTextStyle={{
+          right: styles.giftedMyTime,
+          left: styles.giftedOtherTime,
+        }}
+      />
+    );
+  };
+
+  const renderGiftedActions = (props) => (
+    <Actions
+      {...props}
+      containerStyle={styles.giftedActions}
+      icon={() => <Ionicons name="camera" size={22} color="#6366f1" />}
+      onPressActionButton={() => navigation.navigate('SubmitProof', { conversationId })}
+    />
+  );
+
+  const renderGiftedSend = (props) => (
+    <Send {...props} containerStyle={styles.giftedSendContainer}>
+      <View style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}>
+        <Ionicons name="send" size={18} color="#fff" />
+      </View>
+    </Send>
+  );
+
+  const renderGiftedInputToolbar = (props) => (
+    <InputToolbar
+      {...props}
+      containerStyle={styles.giftedInputToolbar}
+      primaryStyle={styles.giftedInputPrimary}
+    />
+  );
+
+  const renderGiftedComposer = (props) => (
+    <Composer
+      {...props}
+      textInputStyle={styles.giftedComposer}
+      placeholder="Mesaj yazın..."
+    />
+  );
+
+  const renderGiftedFooter = () => {
+    if (!isTyping || !typingUser) return null;
+    return (
+      <View style={styles.typingIndicator}>
+        {LottieView && TYPING_SRC ? (
+          <LottieView source={TYPING_SRC} autoPlay loop style={{ width: 44, height: 24 }} />
+        ) : null}
+        <Text style={styles.typingText}>{typingUser} yazıyor...</Text>
+      </View>
+    );
   };
 
   const renderMessage = ({ item, index }) => {
@@ -453,11 +594,7 @@ export default function Chat({ route, navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -488,6 +625,32 @@ export default function Chat({ route, navigation }) {
         <View style={{ width: 40 }} />
       </View>
 
+      <GiftedChat
+        messages={giftedMessages}
+        user={{ _id: currentUserId }}
+        text={inputText}
+        onInputTextChanged={updateInputText}
+        onSend={(outgoing = []) => sendMessage(outgoing[0]?.text || '')}
+        renderBubble={renderGiftedBubble}
+        renderActions={renderGiftedActions}
+        renderSend={renderGiftedSend}
+        renderInputToolbar={renderGiftedInputToolbar}
+        renderComposer={renderGiftedComposer}
+        renderChatFooter={renderGiftedFooter}
+        onPressAvatar={(user) => openProfile(user?._id)}
+        messagesContainerStyle={styles.giftedMessagesContainer}
+        bottomOffset={Platform.OS === 'ios' ? 12 : 0}
+        keyboardAvoidingViewProps={{ keyboardVerticalOffset: Platform.OS === 'ios' ? 90 : 0 }}
+        isAvatarVisibleForEveryMessage={conversation?.is_group}
+        isUsernameVisible={conversation?.is_group}
+        isSendButtonAlwaysVisible
+        scrollToBottom
+        maxComposerHeight={90}
+        textInputProps={{ maxLength: 1000 }}
+        locale="tr"
+      />
+
+      {false && <>
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -532,6 +695,7 @@ export default function Chat({ route, navigation }) {
           <Ionicons name="send" size={18} color="#fff" />
         </Pressable>
       </View>
+      </>}
 
       {/* Group members */}
       <Modal visible={membersVisible} animationType="slide" transparent onRequestClose={() => setMembersVisible(false)}>
@@ -559,7 +723,7 @@ export default function Chat({ route, navigation }) {
         </View>
       </Modal>
       <LevelUpModal visible={!!levelUp} level={levelUp} onClose={() => setLevelUp(null)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -618,6 +782,71 @@ const styles = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   memberAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#667eea', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   memberName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
+  giftedMessagesContainer: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+  },
+  giftedMyBubble: {
+    backgroundColor: '#6366f1',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingVertical: 2,
+  },
+  giftedOtherBubble: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    paddingVertical: 2,
+  },
+  giftedMyTime: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+  giftedOtherTime: {
+    color: '#94a3b8',
+  },
+  giftedInputToolbar: {
+    marginHorizontal: 8,
+    marginBottom: Platform.OS === 'ios' ? 8 : 10,
+    borderTopWidth: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  giftedInputPrimary: {
+    alignItems: 'center',
+  },
+  giftedComposer: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 20,
+    paddingTop: Platform.OS === 'ios' ? 8 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 6,
+    marginLeft: 0,
+    marginRight: 4,
+  },
+  giftedActions: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+    marginBottom: 0,
+  },
+  giftedSendContainer: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
   messagesList: {
     flex: 1,
   },
@@ -700,9 +929,35 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
   },
+  proofCard: {
+    width: 246,
+    padding: 8,
+    borderRadius: 20,
+    marginVertical: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  myProofCard: {
+    backgroundColor: '#6366f1',
+    borderBottomRightRadius: 4,
+  },
+  otherProofCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderBottomLeftRadius: 4,
+  },
   proofMessage: {
     width: '100%',
     alignItems: 'stretch',
+  },
+  proofCaption: {
+    fontSize: 15,
+    lineHeight: 20,
+    marginBottom: 4,
   },
   proofImage: {
     width: '100%',
