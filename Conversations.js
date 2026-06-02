@@ -20,7 +20,7 @@ import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
 import { haptics } from './utils/feedback';
 let LottieView = null; let HEART_SRC = null;
-try { LottieView = require('lottie-react-native').default; HEART_SRC = require('./assets/lottie/heart.json'); } catch (_) {}
+try { LottieView = require('lottie-react-native').default; HEART_SRC = require('./assets/lottie/heartlike_burst.json'); } catch (_) {}
 
 const { width } = Dimensions.get('window');
 

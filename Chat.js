@@ -295,7 +295,7 @@ export default function Chat({ route, navigation }) {
         const earned = response.data.verifier_xp || 0;
         const diamonds = response.data.verifier_diamonds || 0;
         // Verifier's reward flies into the global XP total (bottom-right).
-        reward(earned, { label: 'Onay', diamonds: diamonds, big: !!response.data.milestone, flash: response.data.milestone ? 'fire' : 'success' });
+        reward(earned, { label: 'Onay', diamonds: diamonds, big: !!response.data.milestone, flash: response.data.milestone ? 'trophy' : 'success' });
         if (response.data.milestone) {
           Alert.alert('🔥 Seri!', `Arkadaşının ${response.data.habit_streak} günlük serisini onayladın! Ekstra +${response.data.milestone_bonus || 0} 💎 kazandı!`);
         }

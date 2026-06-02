@@ -14,6 +14,10 @@ try { LottieView = require('lottie-react-native').default; } catch (_) {}
 const FLASH_SRC = {
   success: require('../assets/lottie/success.json'),
   fire: require('../assets/lottie/fire.json'),
+  trophy: require('../assets/lottie/trophy_unlock.json'),   // big moments
+  badge: require('../assets/lottie/badge_unlock.json'),     // achievements
+  diamond: require('../assets/lottie/diamond.json'),
+  xp: require('../assets/lottie/xpgain_star.json'),
 };
 
 let _id = 0;

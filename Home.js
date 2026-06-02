@@ -21,6 +21,7 @@ import { unwrapPagination } from './utils/api';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
 import { calculateStreakMultiplier, getMultiplierMessage } from './utils/gamification';
+import StreakFlame from './components/StreakFlame';
 import EmptyState from './components/EmptyState';
 import Avatar from './components/Avatar';
 
@@ -327,8 +328,12 @@ export default function Home({ navigation }) {
                 )}
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="flame" size={16} color="#f97316" />
-                <Text style={{ fontWeight: 'bold', color: theme.text, marginLeft: 4, marginRight: 10 }}>{displayStreak} gün</Text>
+                {displayStreak > 0 ? (
+                  <StreakFlame streak={displayStreak} size={26} showCount={false} style={{ marginRight: 4 }} />
+                ) : (
+                  <Ionicons name="flame-outline" size={16} color="#cbd5e1" style={{ marginRight: 4 }} />
+                )}
+                <Text style={{ fontWeight: 'bold', color: theme.text, marginRight: 10 }}>{displayStreak} gün</Text>
                 <Text style={{ color: theme.text, opacity: 0.6 }}>
                   {item.habit_type === 'count' ? `${displayCount}/${item.target_count}` : `${displayTime}/${item.target_time}`}
                 </Text>

@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
 import { getHabitColor } from './utils/colors';
 import Avatar from './components/Avatar';
+import StreakFlame from './components/StreakFlame';
 
 export default function FriendProfile({ route, navigation }) {
     const { userId } = route.params;
@@ -99,7 +100,11 @@ export default function FriendProfile({ route, navigation }) {
                 <View style={{ flex: 1 }}>
                     <Text style={[styles.habitName, { color: theme.text }]}>{item.name}</Text>
                     <View style={styles.streakRow}>
-                        <Ionicons name="flame" size={16} color="#f97316" />
+                        {(item.streak || 0) > 0 ? (
+                            <StreakFlame streak={item.streak} size={24} showCount={false} />
+                        ) : (
+                            <Ionicons name="flame-outline" size={16} color="#cbd5e1" />
+                        )}
                         <Text style={[styles.streakText, { color: theme.text }]}>{item.streak || 0} gün seri</Text>
                     </View>
                 </View>
