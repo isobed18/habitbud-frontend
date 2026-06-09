@@ -20,7 +20,6 @@ import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
 import EmptyState from './components/EmptyState';
 import { haptics } from './utils/feedback';
-import InstagramStories from '@birdwingo/react-native-instagram-stories';
 let LottieView = null; let HEART_SRC = null; let HEART_EXPLODE_SRC = null; let EMPTY_CHAT_SRC = null;
 const DEFAULT_STORY_AVATAR = require('./assets/icon.png');
 try {
@@ -49,6 +48,7 @@ export default function Conversations({ navigation }) {
   // Stories
   const [storyGroups, setStoryGroups] = useState([]);
   const [activeStoryMeta, setActiveStoryMeta] = useState(null);
+  const [viewer, setViewer] = useState(null); // custom story viewer: { gi, si } | null
   const instagramStoriesRef = useRef(null);
   const lastStoryTapRef = useRef(0);
   const storyTapTimerRef = useRef(null);
@@ -307,6 +307,32 @@ export default function Conversations({ navigation }) {
 
   const toggleLike = (storyId) => likeStory(storyId);
 
+  // --- Custom story viewer (replaces the native lib that broke on reanimated 4) ---
+  const activeStoryGroup = viewer ? storyGroups[viewer.gi] : null;
+  const activeStory = activeStoryGroup?.stories?.[viewer?.si] || null;
+  const storyIndex = viewer?.si ?? 0;
+  const openStoryViewer = (gi) => { if (storyGroups[gi]?.stories?.length) setViewer({ gi, si: 0 }); };
+  const closeViewer = () => setViewer(null);
+  const advanceStory = (dir) => setViewer((v) => {
+    if (!v) return v;
+    const g = storyGroups[v.gi];
+    if (!g) return null;
+    const si = v.si + dir;
+    if (si >= 0 && si < (g.stories?.length || 0)) return { ...v, si };
+    let gi = v.gi + dir;
+    while (gi >= 0 && gi < storyGroups.length) {
+      if (storyGroups[gi]?.stories?.length) return { gi, si: dir > 0 ? 0 : storyGroups[gi].stories.length - 1 };
+      gi += dir;
+    }
+    return null; // ran off either end -> close
+  });
+
+  useEffect(() => {
+    if (!viewer) return undefined;
+    const t = setTimeout(() => advanceStory(1), 6000);
+    return () => clearTimeout(t);
+  }, [viewer]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchConversations();
@@ -480,34 +506,19 @@ export default function Conversations({ navigation }) {
             <Text style={styles.storyUser}>Hikaye</Text>
           </Pressable>
 
-          <InstagramStories
-            ref={instagramStoriesRef}
-            stories={instagramStoryData}
-            avatarSize={64}
-            storyAvatarSize={40}
-            showName
-            saveProgress
-            avatarBorderColors={['#f59e0b', '#ec4899', '#8b5cf6']}
-            avatarSeenBorderColors={['#d1d5db', '#d1d5db']}
-            nameTextStyle={styles.storyUser}
-            avatarListContainerStyle={styles.instagramStoryList}
-            imageOverlayView={(
-              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-                <Pressable style={StyleSheet.absoluteFill} onPress={handleStoryTap} />
-                {heartExplode > 0 && LottieView && HEART_EXPLODE_SRC && (
-                  <LottieView key={`ex-${heartExplode}`} source={HEART_EXPLODE_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
-                )}
-                {heartBurst > 0 && LottieView && HEART_SRC && (
-                  <LottieView key={`bu-${heartBurst}`} source={HEART_SRC} autoPlay loop={false} pointerEvents="none" style={styles.heartBurst} />
-                )}
-              </View>
-            )}
-            onStoryStart={(userId, storyId) => setActiveStoryMeta({ userId, storyId })}
-            onHide={() => setActiveStoryMeta(null)}
-            closeIconColor="#fff"
-            progressActiveColor="#fff"
-            progressColor="rgba(255,255,255,0.35)"
-          />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingRight: 8 }}>
+            {storyGroups.map((group, gi) => (
+              <Pressable key={String(group.user_id)} style={styles.createStoryBtn} onPress={() => openStoryViewer(gi)}>
+                <View style={[styles.storyRing, group.all_seen && styles.storyRingSeen]}>
+                  <Image
+                    source={group.avatar ? { uri: getImageUrl(group.avatar) } : DEFAULT_STORY_AVATAR}
+                    style={styles.storyRingImg}
+                  />
+                </View>
+                <Text style={styles.storyUser} numberOfLines={1}>{group.username}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       </View>
 
@@ -670,16 +681,16 @@ export default function Conversations({ navigation }) {
       </Modal>
 
       {/* Story Modal */}
-      {false && <Modal visible={false} animationType="fade" transparent>
+      {viewer && activeStory && <Modal visible animationType="fade" transparent onRequestClose={closeViewer}>
         <View style={styles.storyModalOverlay}>
           {activeStory && (
             <View style={styles.fullStory}>
-              <Pressable style={{ flex: 1 }} onPress={handleStoryTap}>
+              <Pressable style={{ flex: 1 }} onPress={() => advanceStory(1)}>
                 <Image source={{ uri: getImageUrl(activeStory.image) }} style={styles.fullStoryImage} resizeMode="cover" />
               </Pressable>
 
               {/* Tap Left Zone */}
-              <Pressable style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '30%' }} onPress={handlePrevStory} />
+              <Pressable style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '30%' }} onPress={() => advanceStory(-1)} />
 
               <View style={styles.storyHeader}>
                 <View style={styles.storyUserRow}>
@@ -697,7 +708,7 @@ export default function Conversations({ navigation }) {
                       <Ionicons name="trash-outline" size={24} color="#fff" />
                     </Pressable>
                   )}
-                  <Pressable onPress={() => setStoryModalVisible(false)} style={styles.closeStoryBtn}>
+                  <Pressable onPress={closeViewer} style={styles.closeStoryBtn}>
                     <Ionicons name="close" size={28} color="#fff" />
                   </Pressable>
                 </View>
@@ -772,6 +783,9 @@ const styles = StyleSheet.create({
   storyItem: { alignItems: 'center', marginRight: 15 },
   createStoryBtn: { alignItems: 'center', marginRight: 15 },
   plusIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 2, borderColor: '#ccc' },
+  storyRing: { width: 64, height: 64, borderRadius: 32, padding: 3, borderWidth: 2.5, borderColor: '#ec4899', alignItems: 'center', justifyContent: 'center' },
+  storyRingSeen: { borderColor: '#d1d5db' },
+  storyRingImg: { width: '100%', height: '100%', borderRadius: 28, backgroundColor: '#eee' },
   storyCircle: { width: 68, height: 68, borderRadius: 34, padding: 3, borderWidth: 2, borderColor: 'transparent' },
   storyCircleActive: { borderColor: '#8b5cf6' },
   storyAvatar: { width: '100%', height: '100%', borderRadius: 30, backgroundColor: '#ffda00', alignItems: 'center', justifyContent: 'center' },

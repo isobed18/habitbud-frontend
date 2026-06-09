@@ -9,8 +9,10 @@ import {
   Image,
   Modal,
   ScrollView,
+  TextInput,
+  FlatList,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { GiftedChat, Bubble, Composer, InputToolbar, Send, Actions } from 'react-native-gifted-chat';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +49,7 @@ export default function Chat({ route, navigation }) {
   const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
   const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
+  const flatListRef = useRef(null);
   const MAX_RECONNECT_ATTEMPTS = 3;
 
   // Get base URL - remove trailing slash for WebSocket
@@ -362,7 +365,7 @@ export default function Chat({ route, navigation }) {
   };
 
   const scrollToBottom = () => {
-    // GiftedChat handles scroll positioning internally.
+    try { flatListRef.current?.scrollToEnd({ animated: true }); } catch (_) {}
   };
 
   const verifyProof = async (messageId, action) => {
@@ -577,29 +580,6 @@ export default function Chat({ route, navigation }) {
     return () => clearInterval(interval);
   }, [timerRunning, timerPhase, conversation?.id, liveHabit?.id]);
 
-  const giftedMessages = useMemo(() => {
-    return [...messages]
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .map((msg) => ({
-        _id: msg.id,
-        text: msg.content || '',
-        createdAt: new Date(msg.created_at),
-        user: {
-          _id: msg.sender?.id || 'system',
-          name: msg.sender?.username || 'Sistem',
-          avatar: msg.sender?.avatar ? getImageUrl(msg.sender.avatar) : undefined,
-        },
-        image: msg.message_type === 'PROOF' && msg.proof_image ? getImageUrl(msg.proof_image) : undefined,
-        system: !msg.sender,
-        raw: msg,
-      }));
-  }, [messages]);
-
-  const updateInputText = (text) => {
-    setInputText(text);
-    handleInputChange(text);
-  };
-
   const renderProofCard = (giftedMessage) => {
     const item = giftedMessage.raw;
     const isMyMessage = currentUserId && item.sender?.id === currentUserId;
@@ -649,76 +629,6 @@ export default function Chat({ route, navigation }) {
             </Pressable>
           </View>
         )}
-      </View>
-    );
-  };
-
-  const renderGiftedBubble = (props) => {
-    const raw = props.currentMessage?.raw;
-    if (raw?.message_type === 'PROOF') {
-      return renderProofCard(props.currentMessage);
-    }
-
-    return (
-      <Bubble
-        {...props}
-        wrapperStyle={{
-          right: styles.giftedMyBubble,
-          left: styles.giftedOtherBubble,
-        }}
-        textStyle={{
-          right: styles.myMessageText,
-          left: styles.otherMessageText,
-        }}
-        timeTextStyle={{
-          right: styles.giftedMyTime,
-          left: styles.giftedOtherTime,
-        }}
-      />
-    );
-  };
-
-  const renderGiftedActions = (props) => (
-    <Actions
-      {...props}
-      containerStyle={styles.giftedActions}
-      icon={() => <Ionicons name="camera" size={22} color="#6366f1" />}
-      onPressActionButton={() => navigation.navigate('SubmitProof', { conversationId })}
-    />
-  );
-
-  const renderGiftedSend = (props) => (
-    <Send {...props} containerStyle={styles.giftedSendContainer}>
-      <View style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}>
-        <Ionicons name="send" size={18} color="#fff" />
-      </View>
-    </Send>
-  );
-
-  const renderGiftedInputToolbar = (props) => (
-    <InputToolbar
-      {...props}
-      containerStyle={styles.giftedInputToolbar}
-      primaryStyle={styles.giftedInputPrimary}
-    />
-  );
-
-  const renderGiftedComposer = (props) => (
-    <Composer
-      {...props}
-      textInputStyle={styles.giftedComposer}
-      placeholder="Mesaj yazın..."
-    />
-  );
-
-  const renderGiftedFooter = () => {
-    if (!isTyping || !typingUser) return null;
-    return (
-      <View style={styles.typingIndicator}>
-        {LottieView && TYPING_SRC ? (
-          <LottieView source={TYPING_SRC} autoPlay loop style={{ width: 44, height: 24 }} />
-        ) : null}
-        <Text style={styles.typingText}>{typingUser} yazıyor...</Text>
       </View>
     );
   };
@@ -961,41 +871,21 @@ export default function Chat({ route, navigation }) {
         </View>
       )}
 
-      <GiftedChat
-        messages={giftedMessages}
-        user={{ _id: currentUserId }}
-        text={inputText}
-        onInputTextChanged={updateInputText}
-        onSend={(outgoing = []) => sendMessage(outgoing[0]?.text || '')}
-        renderBubble={renderGiftedBubble}
-        renderActions={renderGiftedActions}
-        renderSend={renderGiftedSend}
-        renderInputToolbar={renderGiftedInputToolbar}
-        renderComposer={renderGiftedComposer}
-        renderChatFooter={renderGiftedFooter}
-        renderSystemMessage={renderGiftedSystemMessage}
-        onPressAvatar={(user) => openProfile(user?._id)}
-        messagesContainerStyle={styles.giftedMessagesContainer}
-        bottomOffset={Platform.OS === 'ios' ? 12 : 0}
-        keyboardAvoidingViewProps={{ keyboardVerticalOffset: Platform.OS === 'ios' ? 90 : 0 }}
-        isAvatarVisibleForEveryMessage={conversation?.is_group}
-        isUsernameVisible={conversation?.is_group}
-        isSendButtonAlwaysVisible
-        scrollToBottom
-        maxComposerHeight={90}
-        textInputProps={{ maxLength: 1000 }}
-        locale="tr"
-      />
-
-      {false && <>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         renderItem={renderMessage}
-        style={styles.messagesList}
+        style={[styles.messagesList, { flex: 1 }]}
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={scrollToBottom}
+        onLayout={scrollToBottom}
+        keyboardShouldPersistTaps="handled"
       />
 
       {isTyping && typingUser && (
@@ -1026,13 +916,13 @@ export default function Chat({ route, navigation }) {
         </View>
         <Pressable
           style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-          onPress={sendMessage}
+          onPress={() => sendMessage()}
           disabled={!inputText.trim()}
         >
           <Ionicons name="send" size={18} color="#fff" />
         </Pressable>
       </View>
-      </>}
+      </KeyboardAvoidingView>
 
       {/* Group members */}
       <Modal visible={membersVisible} animationType="slide" transparent onRequestClose={() => setMembersVisible(false)}>
