@@ -16,7 +16,8 @@ try {
   THREE = require('three');
 } catch (_) { /* 3D libs unavailable */ }
 
-// Approximate attach points in the avatar's local space (model ~2 units tall).
+// Fallback attach points in the avatar's local space (model ~2 units tall),
+// used only when the avatar GLB has no matching socket Empty.
 const ANCHOR = {
   head: [0, 1.05, 0.15],
   face: [0, 0.68, 0.6],
@@ -25,6 +26,26 @@ const ANCHOR = {
   neck: [0, 0.5, 0.4],
   none: [0, 0, 0],
 };
+
+// anchor -> socket Empty name baked into the avatar GLB by the rig tooling.
+const ANCHOR_TO_SOCKET = { hand: 'socket_r', head: 'socket_head', face: 'socket_head', neck: 'socket_head', back: 'socket_back' };
+
+// Read socket Empties' positions from the avatar scene, in avatar-local space
+// (independent of the render scale). Returns { socket_r: [x,y,z], ... }.
+function readSockets(scene) {
+  const out = {};
+  if (!scene || !THREE) return out;
+  scene.updateMatrixWorld(true);
+  ['socket_r', 'socket_l', 'socket_head', 'socket_back'].forEach((name) => {
+    const node = scene.getObjectByName(name);
+    if (!node) return;
+    const p = new THREE.Vector3();
+    node.getWorldPosition(p);
+    scene.worldToLocal(p);            // -> avatar-local coords
+    out[name] = [p.x, p.y, p.z];
+  });
+  return out;
+}
 
 function useCachedGlb(remoteUrl) {
   const [uri, setUri] = useState(null);
@@ -66,23 +87,37 @@ function plushify(scene) {
   return scene;
 }
 
-// One equipped item GLB, positioned at its anchor.
-function ItemGLTF({ localUri, anchor, scale }) {
+// One equipped item GLB, positioned at its socket (preferred) or anchor fallback.
+function ItemGLTF({ localUri, anchor, scale, baseScale, sockets }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene.clone()), [gltf.scene]);
-  const pos = ANCHOR[anchor] || ANCHOR.none;
+  const socketName = ANCHOR_TO_SOCKET[anchor];
+  const socketPos = socketName && sockets ? sockets[socketName] : null;
+  // Socket coords are avatar-local -> convert to the group's render space (×baseScale).
+  const pos = socketPos
+    ? [socketPos[0] * baseScale, socketPos[1] * baseScale, socketPos[2] * baseScale]
+    : (ANCHOR[anchor] || ANCHOR.none);
   return <primitive object={scene} position={pos} scale={scale} />;
 }
 
-function ItemMesh({ item, baseScale }) {
+function ItemMesh({ item, baseScale, sockets }) {
   const local = useCachedGlb(item.url);
   if (!local) return null;
-  return <ItemGLTF localUri={local} anchor={item.anchor} scale={(item.scale || 0.4) * baseScale} />;
+  return (
+    <ItemGLTF
+      localUri={local}
+      anchor={item.anchor}
+      sockets={sockets}
+      baseScale={baseScale}
+      scale={(item.scale || 0.4) * baseScale}
+    />
+  );
 }
 
 function Model({ localUri, scale, rot, equippedItems }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
+  const sockets = useMemo(() => readSockets(scene), [scene]);
   const mixer = useMemo(() => {
     if (!THREE || !gltf.animations?.length) return null;
     return new THREE.AnimationMixer(scene);
@@ -115,7 +150,7 @@ function Model({ localUri, scale, rot, equippedItems }) {
       <primitive object={scene} scale={scale} />
       {(equippedItems || []).map((it, i) => (
         <Suspense key={`${it.url}-${i}`} fallback={null}>
-          <ItemMesh item={it} baseScale={scale} />
+          <ItemMesh item={it} baseScale={scale} sockets={sockets} />
         </Suspense>
       ))}
     </group>
