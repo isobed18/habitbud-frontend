@@ -203,17 +203,15 @@ const ProfilePage = ({ navigation }) => {
 
   const handleLogout = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const refreshToken = await require('./utils/auth').getRefreshToken();
-      if (refreshToken) {
-        await axiosInstance.post('users/api/logout/', { refresh: refreshToken });
-      }
-    } catch (error) { console.error(error); }
-    finally {
-      // Profile is a TAB screen; navigation.reset here targets the tab navigator
-      // (which has no 'Login'). Use the root-level forceLogout instead.
-      await forceLogout();
-    }
+    // Log out INSTANTLY: clear tokens + go to Login now. Tell the server in the
+    // background (fire-and-forget) so a slow/unreachable API can't make logout hang.
+    (async () => {
+      try {
+        const refreshToken = await require('./utils/auth').getRefreshToken();
+        if (refreshToken) await axiosInstance.post('users/api/logout/', { refresh: refreshToken });
+      } catch (_) {}
+    })();
+    await forceLogout();  // removeTokens + reset ROOT nav to Login (works from a tab)
   };
 
   const startConversation = async (friendId) => {

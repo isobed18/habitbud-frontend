@@ -63,8 +63,11 @@ export default function Settings({ navigation }) {
       {
         text: t('logout'), style: 'destructive', onPress: async () => {
           haptics.medium();
-          try { await unregisterPushToken(); } catch (_) {}
-          try { await axiosInstance.post('users/api/logout/'); } catch (_) {}
+          // Background (fire-and-forget) so a slow/unreachable server can't stall logout.
+          (async () => {
+            try { await unregisterPushToken(); } catch (_) {}
+            try { await axiosInstance.post('users/api/logout/'); } catch (_) {}
+          })();
           await forceLogout();
         },
       },
