@@ -12,10 +12,11 @@ import {
   Dimensions,
   FlatList,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import axiosInstance, { forceLogout } from './services/axiosInstance';
+import axiosInstance, { forceLogout, getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import Avatar from './components/Avatar';
@@ -535,7 +536,11 @@ const ProfilePage = ({ navigation }) => {
                 return (
                   <View style={styles.inventoryItem}>
                     <View style={[styles.itemIcon, { borderColor: color }]}>
-                      <Ionicons name="cube" size={24} color={color} />
+                      {item.image ? (
+                        <Image source={{ uri: getImageUrl(item.image) }} style={styles.inventoryItemImage} />
+                      ) : (
+                        <Ionicons name="cube" size={24} color={color} />
+                      )}
                     </View>
                     <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                     <Text style={[styles.itemRarity, { color }]}>{item.rarity}</Text>
@@ -642,6 +647,7 @@ const styles = StyleSheet.create({
 
   inventoryItem: { flex: 1 / 3, alignItems: 'center', marginBottom: 20, padding: 5 },
   itemIcon: { width: 60, height: 60, borderRadius: 15, backgroundColor: '#f8f9fa', borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  inventoryItemImage: { width: '100%', height: '100%', borderRadius: 13 },
   itemName: { fontSize: 11, fontWeight: '600', color: '#333' },
   itemRarity: { fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase' },
 

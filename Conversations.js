@@ -15,6 +15,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import Avatar from './components/Avatar';
@@ -71,14 +72,13 @@ export default function Conversations({ navigation }) {
   const [discoverType, setDiscoverType] = useState('study');
   const [discoverRooms, setDiscoverRooms] = useState([]);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
-
   const fetchDiscoverRooms = async (type = discoverType) => {
     setLoadingDiscover(true);
     try {
       const res = await axiosInstance.get(`chat/rooms/discover/?type=${type}`);
       setDiscoverRooms(unwrapPagination(res.data));
     } catch (e) {
-      Alert.alert('Error', 'Public rooms could not be loaded.');
+      setDiscoverRooms([]);
     } finally {
       setLoadingDiscover(false);
     }
@@ -476,8 +476,8 @@ export default function Conversations({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={{ padding: 20, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
         <Text style={styles.title}>Sohbetler</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Pressable style={styles.searchIconBtn} onPress={() => navigation.navigate('Search')}>
@@ -752,12 +752,13 @@ export default function Conversations({ navigation }) {
           )}
         </View>
       </Modal>}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333' },
 
   card: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 20, marginBottom: 12 },

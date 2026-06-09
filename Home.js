@@ -11,12 +11,13 @@ import {
   Dimensions,
   Modal,
   TextInput,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { reward, haptics } from './utils/feedback';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import TimePickerModal from './HomeModals/TimePickerModal';
 import { getHabitColor } from './utils/colors';
@@ -89,6 +90,9 @@ export default function Home({ navigation }) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
   const [buyingFreeze, setBuyingFreeze] = useState(false);
+  const [shopCatalog, setShopCatalog] = useState([]);
+  const [loadingShop, setLoadingShop] = useState(false);
+  const [buyingItemId, setBuyingItemId] = useState(null);
   const [timerModalVisible, setTimerModalVisible] = useState(false);
   const [timerHabit, setTimerHabit] = useState(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -677,10 +681,46 @@ export default function Home({ navigation }) {
     }
   };
 
+  const openShop = async () => {
+    setShowShopModal(true);
+    setLoadingShop(true);
+    try {
+      const response = await axiosInstance.get('challenges/shop/');
+      setShopCatalog(response.data.items || []);
+      setProfile(prev => prev ? ({
+        ...prev,
+        points: response.data.balance ?? prev.points,
+        streak_freezes: response.data.streak_freezes ?? prev.streak_freezes
+      }) : prev);
+    } catch (err) {
+      console.log('Shop catalog unavailable:', err?.message);
+      setShopCatalog([]);
+    } finally {
+      setLoadingShop(false);
+    }
+  };
+
+  const handleBuyShopItem = async (item) => {
+    if (buyingItemId || item.owned) return;
+    setBuyingItemId(item.id);
+    try {
+      const response = await axiosInstance.post(`challenges/shop/${item.id}/buy/`);
+      setProfile(prev => prev ? ({ ...prev, points: response.data.points }) : prev);
+      setShopCatalog(prev => prev.map((entry) => entry.id === item.id ? { ...entry, owned: true } : entry));
+      reward(0, { big: true });
+    } catch (err) {
+      haptics.error();
+      const errMsg = err?.response?.data?.error || 'Satin alma islemi gerceklestirilemedi.';
+      Alert.alert('Magaza', errMsg);
+    } finally {
+      setBuyingItemId(null);
+    }
+  };
+
   const renderShopModal = () => (
     <Modal visible={showShopModal} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: '#1e293b', paddingVertical: 30 }]}>
+        <View style={[styles.modalContent, { backgroundColor: '#1e293b', paddingVertical: 24, maxHeight: '86%' }]}>
           <Text style={[styles.modalHeader, { color: '#fff', fontSize: 22, fontWeight: '900', marginBottom: 10 }]}>Alışkanlık Mağazası 💎</Text>
           <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 20, fontSize: 13 }}>Elmaslarını harcayarak serini koru!</Text>
           
@@ -696,6 +736,46 @@ export default function Home({ navigation }) {
               <Text style={{ color: '#64748b', fontSize: 11 }}>Dondurucu</Text>
             </View>
           </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {loadingShop && (
+              <View style={styles.shopLoadingRow}>
+                <ActivityIndicator color="#38bdf8" />
+                <Text style={styles.shopLoadingText}>Magaza yukleniyor</Text>
+              </View>
+            )}
+
+            {shopCatalog.map((item) => (
+              <View key={item.id} style={styles.shopItemCard}>
+                <View style={styles.shopItemHeader}>
+                  <View style={styles.shopItemImageWrap}>
+                    {item.image ? (
+                      <Image source={{ uri: getImageUrl(item.image) }} style={styles.shopItemImage} />
+                    ) : (
+                      <Ionicons name="sparkles" size={24} color="#38bdf8" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.shopItemName}>{item.name}</Text>
+                    <Text style={styles.shopItemMeta}>{(item.rarity || 'common').toUpperCase()}</Text>
+                  </View>
+                </View>
+                <Text style={styles.shopItemDescription}>{item.description || 'Profilinde ve envanterinde gorunen kozmetik item.'}</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.shopBuyBtn,
+                    item.owned && styles.shopBuyBtnOwned,
+                    { opacity: (pressed || buyingItemId === item.id) ? 0.72 : 1 }
+                  ]}
+                  onPress={() => handleBuyShopItem(item)}
+                  disabled={item.owned || buyingItemId === item.id}
+                >
+                  <Text style={[styles.shopBuyText, item.owned && styles.shopBuyTextOwned]}>
+                    {item.owned ? 'Envanterde' : `${item.price_points || 0} elmas`}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
 
           {/* Item Card */}
           <View style={{ backgroundColor: '#334155', borderRadius: 16, padding: 15, marginBottom: 25, borderWidth: 1, borderColor: '#475569' }}>
@@ -728,6 +808,8 @@ export default function Home({ navigation }) {
             </Pressable>
           </View>
 
+          </ScrollView>
+
           <Pressable onPress={() => setShowShopModal(false)} style={{ alignItems: 'center', marginTop: 10 }}>
             <Text style={{ color: '#94a3b8', fontWeight: '700', fontSize: 14 }}>Kapat</Text>
           </Pressable>
@@ -735,6 +817,114 @@ export default function Home({ navigation }) {
       </View>
     </Modal>
   );
+
+  const renderStatsModal = () => {
+    const weekly = activeStats?.weekly || [];
+    const maxWeek = Math.max(1, ...weekly.map((w) => (w.completed || 0) + (w.partial || 0)));
+    const statusCounts = activeStats?.status_counts || {};
+    const progress = activeStats?.progress || {};
+    const progressCurrent = progress.current_value ?? progress.current ?? 0;
+    const progressTarget = progress.target_value ?? progress.target ?? 0;
+    const progressPercent = progressTarget ? Math.min(1, progressCurrent / progressTarget) : 0;
+    const calendar = (activeStats?.calendar || []).slice(-42);
+
+    return (
+      <Modal visible={statsModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.statsModalContent}>
+            <View style={styles.statsHeaderRow}>
+              <View>
+                <Text style={styles.statsTitle}>{activeStats?.habit_name || 'Stats'}</Text>
+                <Text style={styles.statsSubtitle}>{activeStats?.habit_type || 'habit'} performance</Text>
+              </View>
+              <Pressable style={styles.statsCloseBtn} onPress={() => setStatsModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#0f172a" />
+              </Pressable>
+            </View>
+
+            {loadingStats ? (
+              <ActivityIndicator color="#ff7f50" />
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.statsSummaryGrid}>
+                  <View style={styles.statsMiniCard}>
+                    <Text style={styles.statsMiniValue}>{activeStats?.current_streak || 0}</Text>
+                    <Text style={styles.statsMiniLabel}>Current</Text>
+                  </View>
+                  <View style={styles.statsMiniCard}>
+                    <Text style={styles.statsMiniValue}>{activeStats?.best_streak || 0}</Text>
+                    <Text style={styles.statsMiniLabel}>Best</Text>
+                  </View>
+                  <View style={styles.statsMiniCard}>
+                    <Text style={styles.statsMiniValue}>{activeStats?.completion_rate || 0}%</Text>
+                    <Text style={styles.statsMiniLabel}>Rate</Text>
+                  </View>
+                  <View style={styles.statsMiniCard}>
+                    <Text style={styles.statsMiniValue}>{activeStats?.verification_count || 0}</Text>
+                    <Text style={styles.statsMiniLabel}>Verified</Text>
+                  </View>
+                </View>
+
+                <View style={styles.statsSection}>
+                  <View style={styles.statsSectionHeader}>
+                    <Text style={styles.statsSectionTitle}>Today progress</Text>
+                    <Text style={styles.statsSectionMeta}>{Math.round(progressPercent * 100)}%</Text>
+                  </View>
+                  <View style={styles.statsProgressTrack}>
+                    <View style={[styles.statsProgressFill, { width: `${progressPercent * 100}%` }]} />
+                  </View>
+                </View>
+
+                <View style={styles.statsSection}>
+                  <Text style={styles.statsSectionTitle}>Weekly rhythm</Text>
+                  <View style={styles.statsChart}>
+                    {weekly.map((week) => {
+                      const value = (week.completed || 0) + (week.partial || 0);
+                      return (
+                        <View key={week.week} style={styles.statsChartColumn}>
+                          <View style={styles.statsChartTrack}>
+                            <View style={[styles.statsChartBar, { height: `${Math.max(8, (value / maxWeek) * 100)}%` }]} />
+                          </View>
+                          <Text style={styles.statsChartLabel}>{(week.week || '').slice(5)}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.statsSection}>
+                  <Text style={styles.statsSectionTitle}>Verification status</Text>
+                  {['completed', 'partial', 'missed'].map((key) => (
+                    <View key={key} style={styles.statsStatusRow}>
+                      <Text style={styles.statsStatusLabel}>{key}</Text>
+                      <Text style={styles.statsStatusValue}>{statusCounts[key] || 0}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.statsSection}>
+                  <Text style={styles.statsSectionTitle}>Last 42 days</Text>
+                  <View style={styles.statsHeatmap}>
+                    {calendar.map((day) => (
+                      <View
+                        key={day.date}
+                        style={[
+                          styles.statsHeatCell,
+                          day.status === 'completed' && styles.statsHeatCompleted,
+                          day.status === 'partial' && styles.statsHeatPartial,
+                          day.status === 'missed' && styles.statsHeatMissed
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   const renderDopamineHeader = () => {
     if (!profile) return null;
@@ -758,11 +948,11 @@ export default function Home({ navigation }) {
             <Text style={styles.dopamineStatEmoji}>🔥</Text>
             <Text style={styles.dopamineStatVal}>{highestStreak}</Text>
           </View>
-          <Pressable style={styles.dopamineStatBadge} onPress={() => setShowShopModal(true)}>
+          <Pressable style={styles.dopamineStatBadge} onPress={openShop}>
             <Text style={styles.dopamineStatEmoji}>❄️</Text>
             <Text style={styles.dopamineStatVal}>{profile.streak_freezes || 0}</Text>
           </Pressable>
-          <Pressable style={styles.dopamineStatBadge} onPress={() => setShowShopModal(true)}>
+          <Pressable style={styles.dopamineStatBadge} onPress={openShop}>
             <Text style={styles.dopamineStatEmoji}>💎</Text>
             <Text style={styles.dopamineStatVal}>{profile.points || 0}</Text>
           </Pressable>
@@ -812,8 +1002,19 @@ export default function Home({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {renderShopModal()}
+      {renderStatsModal()}
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 100 }}>
         {renderDopamineHeader()}
+        <Pressable style={styles.shopStrip} onPress={openShop}>
+          <View style={styles.shopStripIcon}>
+            <Ionicons name="sparkles" size={20} color="#0f172a" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.shopStripTitle}>Item Magazasi</Text>
+            <Text style={styles.shopStripText}>Elmaslarla kozmetik ve seri koruma al</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#0f172a" />
+        </Pressable>
         {renderCalendarStrip()}
         {renderPendingInvites()}
         <View style={styles.listContainer}>
@@ -1037,6 +1238,29 @@ export default function Home({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  shopStrip: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  shopStripIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#fbbf24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopStripTitle: { fontSize: 14, fontWeight: '900', color: '#0f172a' },
+  shopStripText: { fontSize: 12, fontWeight: '700', color: '#92400e', marginTop: 2 },
   calendarContainer: { padding: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   monthTitle: { fontSize: 18, fontWeight: 'bold' },
@@ -1066,6 +1290,47 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#f9f9f9', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#eee' },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 5, color: '#444' },
   btn: { padding: 15, borderRadius: 12, backgroundColor: '#eee', alignItems: 'center' },
+  shopLoadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 14 },
+  shopLoadingText: { color: '#cbd5e1', fontWeight: '700', fontSize: 12 },
+  shopItemCard: { backgroundColor: '#334155', borderRadius: 16, padding: 15, marginBottom: 14, borderWidth: 1, borderColor: '#475569' },
+  shopItemHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  shopItemImageWrap: { width: 50, height: 50, borderRadius: 14, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+  shopItemImage: { width: '100%', height: '100%' },
+  shopItemName: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  shopItemMeta: { color: '#38bdf8', fontWeight: '900', fontSize: 11, marginTop: 2 },
+  shopItemDescription: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginBottom: 14 },
+  shopBuyBtn: { backgroundColor: '#38bdf8', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  shopBuyBtnOwned: { backgroundColor: '#e2e8f0' },
+  shopBuyText: { color: '#0f172a', fontWeight: '900', fontSize: 14 },
+  shopBuyTextOwned: { color: '#475569' },
+  statsModalContent: { width: '92%', maxHeight: '88%', backgroundColor: '#fff', borderRadius: 22, padding: 18 },
+  statsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  statsTitle: { fontSize: 22, fontWeight: '900', color: '#0f172a' },
+  statsSubtitle: { fontSize: 12, fontWeight: '700', color: '#64748b', marginTop: 2 },
+  statsCloseBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  statsSummaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  statsMiniCard: { width: '47%', backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#e2e8f0' },
+  statsMiniValue: { fontSize: 24, fontWeight: '900', color: '#0f172a' },
+  statsMiniLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', marginTop: 2 },
+  statsSection: { marginTop: 18 },
+  statsSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statsSectionTitle: { fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 10 },
+  statsSectionMeta: { fontSize: 12, fontWeight: '900', color: '#10b981' },
+  statsProgressTrack: { height: 12, borderRadius: 6, backgroundColor: '#e2e8f0', overflow: 'hidden' },
+  statsProgressFill: { height: '100%', borderRadius: 6, backgroundColor: '#10b981' },
+  statsChart: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 130, backgroundColor: '#f8fafc', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  statsChartColumn: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
+  statsChartTrack: { width: 16, flex: 1, borderRadius: 8, backgroundColor: '#e2e8f0', overflow: 'hidden', justifyContent: 'flex-end' },
+  statsChartBar: { width: '100%', borderRadius: 8, backgroundColor: '#ff7f50' },
+  statsChartLabel: { fontSize: 9, fontWeight: '800', color: '#64748b', marginTop: 6 },
+  statsStatusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  statsStatusLabel: { fontSize: 13, fontWeight: '800', color: '#334155', textTransform: 'capitalize' },
+  statsStatusValue: { fontSize: 13, fontWeight: '900', color: '#0f172a' },
+  statsHeatmap: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  statsHeatCell: { width: 13, height: 13, borderRadius: 4, backgroundColor: '#e2e8f0' },
+  statsHeatCompleted: { backgroundColor: '#10b981' },
+  statsHeatPartial: { backgroundColor: '#fbbf24' },
+  statsHeatMissed: { backgroundColor: '#fecaca' },
   multiplierBadge: { marginTop: 4, backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
   multiplierText: { fontSize: 10, fontWeight: 'bold', color: '#B46A00' },
   dopamineHeader: {
