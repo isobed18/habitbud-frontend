@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axiosInstance, { getImageUrl } from './services/axiosInstance';
+import axiosInstance, { getImageUrl, forceLogout } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import { haptics } from './utils/feedback';
@@ -65,8 +65,7 @@ export default function Settings({ navigation }) {
           haptics.medium();
           try { await unregisterPushToken(); } catch (_) {}
           try { await axiosInstance.post('users/api/logout/'); } catch (_) {}
-          await removeTokens();
-          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          await forceLogout();
         },
       },
     ]);

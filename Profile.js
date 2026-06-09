@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import axiosInstance from './services/axiosInstance';
+import axiosInstance, { forceLogout } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
 import { removeTokens } from './utils/auth';
 import Avatar from './components/Avatar';
@@ -210,8 +210,9 @@ const ProfilePage = ({ navigation }) => {
       }
     } catch (error) { console.error(error); }
     finally {
-      await removeTokens();
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      // Profile is a TAB screen; navigation.reset here targets the tab navigator
+      // (which has no 'Login'). Use the root-level forceLogout instead.
+      await forceLogout();
     }
   };
 
