@@ -28,8 +28,8 @@ import AvatarStudio from './AvatarStudio';
 import { PreferencesProvider } from './utils/preferences';
 
 // Utils & Services
-import { getAccessToken } from './utils/auth';
-import { navigationRef } from './services/axiosInstance';
+import { getAccessToken, removeTokens } from './utils/auth';
+import axiosInstance, { navigationRef } from './services/axiosInstance';
 import { registerForPushNotifications } from './utils/push';
 import * as ExpoNotifications from 'expo-notifications';
 import RewardOverlay from './components/RewardOverlay';
@@ -130,10 +130,20 @@ export default function App() {
     const checkAuth = async () => {
       try {
         const token = await getAccessToken();
-        setInitialRoute(token ? 'Main' : 'Login');
-        // If already logged in, register this device for push notifications.
-        if (token) {
+        if (!token) { setInitialRoute('Login'); return; }
+        // A token EXISTING is not enough — it may be stale/expired. Validate it
+        // against the API so a dead token can't strand the user inside the app.
+        try {
+          await axiosInstance.get('users/api/profile/');
+          setInitialRoute('Main');
           registerForPushNotifications();
+        } catch (e) {
+          if (e?.response?.status === 401) {
+            await removeTokens();      // refresh also failed -> truly logged out
+            setInitialRoute('Login');
+          } else {
+            setInitialRoute('Main');   // network/server error: don't lock a valid user out
+          }
         }
       } catch (error) {
         console.error('Auth check failed:', error);

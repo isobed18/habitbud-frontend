@@ -22,6 +22,14 @@ export const getImageUrl = (url) => {
     return `${cleanBase}${cleanUrl}`;
 };
 
+// Clear the stored session and bounce the user to the Login screen.
+export const forceLogout = async () => {
+    await removeTokens();
+    if (navigationRef.isReady()) {
+        navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+};
+
 const axiosInstance = axios.create({
     baseURL: BASE_URL,
     timeout: 30000,
@@ -49,11 +57,11 @@ axiosInstance.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        if (error.response && error.response.status === 401 && !originalRequest._retry) {
+        if (error.response && error.response.status === 401 && originalRequest && !originalRequest._retry) {
             originalRequest._retry = true;
-            try {
-                const refreshToken = await getRefreshToken();
-                if (refreshToken) {
+            const refreshToken = await getRefreshToken();
+            if (refreshToken) {
+                try {
                     const response = await axios.post(BASE_URL + 'users/api/token/refresh/', {
                         refresh: refreshToken,
                     });
@@ -63,16 +71,11 @@ axiosInstance.interceptors.response.use(
                     axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
                     originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
                     return axiosInstance(originalRequest);
+                } catch (refreshError) {
+                    await forceLogout();   // refresh token expired/invalid
                 }
-            } catch (refreshError) {
-                // Refresh failed - Logout user
-                await removeTokens();
-                if (navigationRef.isReady()) {
-                    navigationRef.reset({
-                        index: 0,
-                        routes: [{ name: 'Login' }],
-                    });
-                }
+            } else {
+                await forceLogout();       // no refresh token -> can't recover the session
             }
         }
         return Promise.reject(error);
