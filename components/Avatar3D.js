@@ -30,21 +30,27 @@ const ANCHOR = {
 // anchor -> socket Empty name baked into the avatar GLB by the rig tooling.
 const ANCHOR_TO_SOCKET = { hand: 'socket_r', head: 'socket_head', face: 'socket_head', neck: 'socket_head', back: 'socket_back' };
 
-// Read socket Empties' positions from the avatar scene, in avatar-local space
-// (independent of the render scale). Returns { socket_r: [x,y,z], ... }.
-function readSockets(scene) {
-  const out = {};
-  if (!scene || !THREE) return out;
+// Measure the avatar at its native scale: geometric center (so we can recenter
+// models whose origin is off) and each socket's position RELATIVE TO that center.
+// Returns { center:[x,y,z], sockets:{ socket_r:[x,y,z], ... } } — all center-relative,
+// so positioning the scene at -center and items at sockets keeps them aligned.
+function measureScene(scene) {
+  const result = { center: [0, 0, 0], sockets: {} };
+  if (!scene || !THREE) return result;
+  scene.scale.set(1, 1, 1);            // measure in native units, ignore render scale
+  scene.position.set(0, 0, 0);
   scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene);
+  const c = box.getCenter(new THREE.Vector3());
+  result.center = [c.x, c.y, c.z];
   ['socket_r', 'socket_l', 'socket_head', 'socket_back'].forEach((name) => {
     const node = scene.getObjectByName(name);
     if (!node) return;
     const p = new THREE.Vector3();
     node.getWorldPosition(p);
-    scene.worldToLocal(p);            // -> avatar-local coords
-    out[name] = [p.x, p.y, p.z];
+    result.sockets[name] = [p.x - c.x, p.y - c.y, p.z - c.z];  // center-relative
   });
-  return out;
+  return result;
 }
 
 function useCachedGlb(remoteUrl) {
@@ -88,19 +94,22 @@ function plushify(scene) {
 }
 
 // One equipped item GLB, positioned at its socket (preferred) or anchor fallback.
-function ItemGLTF({ localUri, anchor, scale, baseScale, sockets }) {
+// All positions are center-relative (matching the recentered avatar) × baseScale.
+function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene.clone()), [gltf.scene]);
   const socketName = ANCHOR_TO_SOCKET[anchor];
   const socketPos = socketName && sockets ? sockets[socketName] : null;
-  // Socket coords are avatar-local -> convert to the group's render space (×baseScale).
-  const pos = socketPos
-    ? [socketPos[0] * baseScale, socketPos[1] * baseScale, socketPos[2] * baseScale]
-    : (ANCHOR[anchor] || ANCHOR.none);
+  const local = socketPos
+    ? socketPos                                   // already center-relative
+    : [(ANCHOR[anchor] || ANCHOR.none)[0] - center[0],
+       (ANCHOR[anchor] || ANCHOR.none)[1] - center[1],
+       (ANCHOR[anchor] || ANCHOR.none)[2] - center[2]];
+  const pos = [local[0] * baseScale, local[1] * baseScale, local[2] * baseScale];
   return <primitive object={scene} position={pos} scale={scale} />;
 }
 
-function ItemMesh({ item, baseScale, sockets }) {
+function ItemMesh({ item, baseScale, sockets, center }) {
   const local = useCachedGlb(item.url);
   if (!local) return null;
   return (
@@ -108,6 +117,7 @@ function ItemMesh({ item, baseScale, sockets }) {
       localUri={local}
       anchor={item.anchor}
       sockets={sockets}
+      center={center}
       baseScale={baseScale}
       scale={(item.scale || 0.4) * baseScale}
     />
@@ -117,7 +127,7 @@ function ItemMesh({ item, baseScale, sockets }) {
 function Model({ localUri, scale, rot, equippedItems }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
-  const sockets = useMemo(() => readSockets(scene), [scene]);
+  const { center, sockets } = useMemo(() => measureScene(scene), [scene]);
   const mixer = useMemo(() => {
     if (!THREE || !gltf.animations?.length) return null;
     return new THREE.AnimationMixer(scene);
@@ -147,10 +157,17 @@ function Model({ localUri, scale, rot, equippedItems }) {
   });
   return (
     <group ref={ref}>
-      <primitive object={scene} scale={scale} />
+      {/* Recenter: offset the model so its geometric center sits at the group
+          origin (some GLBs aren't centered -> appeared top-left). Items use the
+          same center, so they stay aligned to the avatar. */}
+      <primitive
+        object={scene}
+        scale={scale}
+        position={[-center[0] * scale, -center[1] * scale, -center[2] * scale]}
+      />
       {(equippedItems || []).map((it, i) => (
         <Suspense key={`${it.url}-${i}`} fallback={null}>
-          <ItemMesh item={it} baseScale={scale} sockets={sockets} />
+          <ItemMesh item={it} baseScale={scale} sockets={sockets} center={center} />
         </Suspense>
       ))}
     </group>

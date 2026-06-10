@@ -2,7 +2,9 @@
 //   1. uploaded avatar image (user.avatar)
 //   2. generated/dress-up avatar (user.avatar_config)
 //   3. letter fallback (first char of username)
-import React from 'react';
+// If the image URI fails to load (stale path, server down), we fall back to the
+// letter instead of rendering an empty circle.
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { getImageUrl } from '../services/axiosInstance';
 import { parseAvatarConfig } from '../utils/avatar';
@@ -19,8 +21,17 @@ export default function Avatar({ user, size = 48, style }) {
   const snapshot = cfg?.model_thumb ? getImageUrl(cfg.model_thumb) : null;
   const uri = uploaded || snapshot;
 
-  if (uri) {
-    return <Image source={{ uri }} style={[base, { backgroundColor: '#eef2ff' }, style]} />;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [uri]);
+
+  if (uri && !failed) {
+    return (
+      <Image
+        source={{ uri }}
+        style={[base, { backgroundColor: '#eef2ff' }, style]}
+        onError={() => setFailed(true)}
+      />
+    );
   }
   return (
     <View style={[base, styles.letter, style]}>
