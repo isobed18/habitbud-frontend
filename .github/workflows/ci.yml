@@ -1,0 +1,45 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [codex/habit-verification, main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Babel-parse every screen & component
+        run: |
+          node -e "
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const skip = new Set(['babel.config.js', 'metro.config.js', 'app.config.js', 'index.js', 'setup.js']);
+          const list = (dir) => fs.readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => dir === '.' ? f : dir + '/' + f);
+          const files = [
+            ...list('.').filter((f) => !skip.has(f)),
+            ...list('components'), ...list('utils'), ...list('services'),
+          ];
+          let failed = 0;
+          for (const f of files) {
+            try { babel.transformFileSync(f, { presets: ['babel-preset-expo'] }); }
+            catch (e) { failed++; console.error('PARSE FAIL', f, '-', e.message.split('\n')[0]); }
+          }
+          console.log(files.length + ' files checked, ' + failed + ' failed');
+          process.exit(failed ? 1 : 0);
+          "
+
+      - name: Expo config resolves (prod API URL override)
+        env:
+          API_URL: https://ci.example.com/
+        run: npx expo config --type public > /dev/null && echo "expo config OK"
