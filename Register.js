@@ -8,6 +8,7 @@ import {
     Alert,
     ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axiosInstance from './services/axiosInstance';
 import { saveTokens } from './utils/auth';
 
@@ -58,7 +59,8 @@ export default function Register({ navigation }) {
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView style={{ flex: 1 }}>
             <View style={styles.content}>
                 <Text style={styles.title}>Kayıt Ol</Text>
 
@@ -124,6 +126,7 @@ export default function Register({ navigation }) {
                 </Pressable>
             </View>
         </ScrollView>
+        </SafeAreaView>
     );
 }
 

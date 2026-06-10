@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance, { forceLogout, getImageUrl } from './services/axiosInstance';
@@ -418,7 +419,7 @@ const ProfilePage = ({ navigation }) => {
   ];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <SectionList
         sections={sections}
         keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
@@ -587,7 +588,7 @@ const ProfilePage = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 

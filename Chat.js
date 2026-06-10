@@ -13,6 +13,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { getAccessToken } from './utils/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -743,7 +744,7 @@ export default function Chat({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -1025,7 +1026,7 @@ export default function Chat({ route, navigation }) {
       </Modal>
 
       <LevelUpModal visible={!!levelUp} level={levelUp} onClose={() => setLevelUp(null)} />
-    </View>
+    </SafeAreaView>
   );
 }
 

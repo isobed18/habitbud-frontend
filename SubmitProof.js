@@ -14,6 +14,7 @@ import {
   Dimensions,
   Easing,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import axiosInstance from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
@@ -231,7 +232,7 @@ export default function SubmitProof({ route, navigation }) {
   const filteredFriends = friends.filter((f) => f.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.headerTitle}>Check Gönder 📸</Text>
 
@@ -426,7 +427,7 @@ export default function SubmitProof({ route, navigation }) {
           </View>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -8,6 +8,7 @@ import {
     ScrollView,
     Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
@@ -216,7 +217,7 @@ export default function AddHabit({ navigation }) {
             : '';
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Text style={styles.title}>New Habit</Text>
                 <Pressable onPress={() => navigation.goBack()}>
@@ -460,7 +461,7 @@ export default function AddHabit({ navigation }) {
                 onClose={() => setTimePickerVisible(false)}
                 onSelect={(secs) => setHabitForm({ ...habitForm, target_time: secs })}
             />
-        </View>
+        </SafeAreaView>
     );
 }
 

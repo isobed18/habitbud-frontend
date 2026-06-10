@@ -12,6 +12,7 @@ import {
     Dimensions,
     Image
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance, { getImageUrl } from './services/axiosInstance';
 import { unwrapPagination } from './utils/api';
@@ -359,7 +360,7 @@ export default function Challenges({ navigation }) {
     };
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color="#333" />
@@ -495,7 +496,7 @@ export default function Challenges({ navigation }) {
                     </View>
                 </View>
             </Modal>
-        </View>
+        </SafeAreaView>
     );
 }
 

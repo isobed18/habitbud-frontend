@@ -9,6 +9,7 @@ import {
     FlatList,
     Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import axiosInstance from './services/axiosInstance';
@@ -132,7 +133,7 @@ export default function FriendProfile({ route, navigation }) {
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color="#333" />
@@ -184,7 +185,7 @@ export default function FriendProfile({ route, navigation }) {
                     <Text style={styles.removeBtnText}>Arkadaşlıktan Çıkar</Text>
                 </Pressable>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 
