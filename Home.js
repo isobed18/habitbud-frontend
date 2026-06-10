@@ -966,6 +966,9 @@ export default function Home({ navigation }) {
   );
 
   const renderPendingInvites = () => {
+    // Pivot A/B: snap-flow hides the shared-habit (duo/group) emphasis.
+    const { PIVOT_SNAP_FLOW } = require('./utils/flags');
+    if (PIVOT_SNAP_FLOW) return null;
     if (pendingConnections.length === 0) return null;
     return (
       <View style={styles.invitesContainer}>
@@ -1090,8 +1093,8 @@ export default function Home({ navigation }) {
               })}
             </View>
 
-            {/* Convert Solo habit to Duo or Group */}
-            {(!connections.some(c => c.status === 'accepted' && (c.habit1_id === habitForm.id || c.habit2_id === habitForm.id)) &&
+            {/* Convert Solo habit to Duo or Group (hidden in the snap-flow pivot) */}
+            {!require('./utils/flags').PIVOT_SNAP_FLOW && (!connections.some(c => c.status === 'accepted' && (c.habit1_id === habitForm.id || c.habit2_id === habitForm.id)) &&
              !groups.some(g => g.memberships && g.memberships.some(m => m.habit && m.habit.id === habitForm.id))) && (
               <Pressable
                 onPress={() => {

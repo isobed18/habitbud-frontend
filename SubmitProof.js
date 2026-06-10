@@ -188,6 +188,14 @@ export default function SubmitProof({ route, navigation }) {
           })
         );
         result.checkIds = checkResponses.map((r) => r.data?.id).filter(Boolean);
+        // AI pre-verification feedback (flag-gated; backend includes an `ai` block).
+        try {
+          const { AI_VERIFY_UI } = require('./utils/flags');
+          const ai = checkResponses[0]?.data?.ai;
+          if (AI_VERIFY_UI && ai?.verdict === 'approved') {
+            Alert.alert('🤖 AI doğruladı', `Fotoğraf alışkanlığınla eşleşti (güven %${Math.round((ai.confidence || 0) * 100)}). Arkadaşlarına gönderildi!`);
+          }
+        } catch (_) {}
       }
 
       haptics.success();

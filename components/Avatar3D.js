@@ -36,16 +36,21 @@ const ANCHOR_TO_SOCKET = { hand: 'socket_r', head: 'socket_head', face: 'socket_
 // items hang on independent sockets, so fixes compose automatically.
 function resolveTuning(attachTuning, avatarBase, slug) {
   const t = attachTuning || {};
-  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], scale: 1.0 };
+  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], scale: 1.0, abs: false };
+  const override = slug && avatarBase ? ((t.avatar_overrides || {})[avatarBase] || {})[slug] : null;
   [(t.socket_tuning || {})._default,
    slug ? (t.socket_tuning || {})[slug] : null,
-   slug && avatarBase ? ((t.avatar_overrides || {})[avatarBase] || {})[slug] : null,
+   override,
   ].forEach((layer) => {
     if (!layer) return;
     if (layer.loc) merged.loc = layer.loc;
     if (layer.rot_deg) merged.rot_deg = layer.rot_deg;
     if (layer.scale != null) merged.scale = layer.scale;
   });
+  // Blender fixes (extract_offset.py) store the item's ABSOLUTE socket-space
+  // transform — loc/rot/scale must be applied as-is, not on top of the generic
+  // item_scale heuristic, or everything double-scales.
+  if (override) merged.abs = true;
   return merged;
 }
 
@@ -127,7 +132,9 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
   const off = tune?.loc || [0, 0, 0];
   const pos = [(base[0] + off[0]) * baseScale, (base[1] + off[1]) * baseScale, (base[2] + off[2]) * baseScale];
   const rot = (tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180);
-  return <primitive object={scene} position={pos} rotation={rot} scale={scale * (tune?.scale ?? 1)} />;
+  // Absolute mode (Blender fix): tune.scale IS the final socket-space scale.
+  const finalScale = tune?.abs ? tune.scale * baseScale : scale * (tune?.scale ?? 1);
+  return <primitive object={scene} position={pos} rotation={rot} scale={finalScale} />;
 }
 
 function ItemMesh({ item, baseScale, sockets, center, attachTuning, avatarBase }) {
