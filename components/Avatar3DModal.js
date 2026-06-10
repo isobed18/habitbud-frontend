@@ -17,12 +17,13 @@ const { height: H } = Dimensions.get('window');
 export default function Avatar3DModal({
   visible, url, scale = 1.2, onClose,
   dressItems = null, equipped = [], onToggle, onSave,
+  attachTuning = null, avatarBase = null,
 }) {
   if (!visible) return null;
 
   const equippedObjs = (dressItems || [])
     .filter((it) => equipped.includes(it.id))
-    .map((it) => ({ url: it.model_glb || it.model_url, anchor: it.anchor || 'head', scale: it.item_scale || 0.45 }));
+    .map((it) => ({ url: it.model_glb || it.model_url, anchor: it.anchor || 'head', scale: it.item_scale || 0.45, slug: it.slug }));
 
   return (
     <View style={styles.overlay}>
@@ -36,7 +37,7 @@ export default function Avatar3DModal({
         </Pressable>
       )}
 
-      <Avatar3D url={url} scale={scale} equippedItems={equippedObjs} height={H * (dressItems ? 0.58 : 0.7)} style={{ width: '100%' }} />
+      <Avatar3D url={url} scale={scale} equippedItems={equippedObjs} attachTuning={attachTuning} avatarBase={avatarBase} height={H * (dressItems ? 0.58 : 0.7)} style={{ width: '100%' }} />
 
       {dressItems ? (
         <View style={styles.dressBar}>

@@ -30,6 +30,25 @@ const ANCHOR = {
 // anchor -> socket Empty name baked into the avatar GLB by the rig tooling.
 const ANCHOR_TO_SOCKET = { hand: 'socket_r', head: 'socket_head', face: 'socket_head', neck: 'socket_head', back: 'socket_back' };
 
+// Merge placement tuning for one item on one avatar. Most specific wins:
+// avatar_overrides[base][slug] > socket_tuning[slug] > socket_tuning._default.
+// Fixing an item once per avatar makes EVERY hand×head combination correct —
+// items hang on independent sockets, so fixes compose automatically.
+function resolveTuning(attachTuning, avatarBase, slug) {
+  const t = attachTuning || {};
+  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], scale: 1.0 };
+  [(t.socket_tuning || {})._default,
+   slug ? (t.socket_tuning || {})[slug] : null,
+   slug && avatarBase ? ((t.avatar_overrides || {})[avatarBase] || {})[slug] : null,
+  ].forEach((layer) => {
+    if (!layer) return;
+    if (layer.loc) merged.loc = layer.loc;
+    if (layer.rot_deg) merged.rot_deg = layer.rot_deg;
+    if (layer.scale != null) merged.scale = layer.scale;
+  });
+  return merged;
+}
+
 // Measure the avatar at its native scale: geometric center (so we can recenter
 // models whose origin is off) and each socket's position RELATIVE TO that center.
 // Returns { center:[x,y,z], sockets:{ socket_r:[x,y,z], ... } } — all center-relative,
@@ -93,38 +112,42 @@ function plushify(scene) {
   return scene;
 }
 
-// One equipped item GLB, positioned at its socket (preferred) or anchor fallback.
-// All positions are center-relative (matching the recentered avatar) × baseScale.
-function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center }) {
+// One equipped item GLB, positioned at its socket (preferred) or anchor fallback,
+// then adjusted by the per-(avatar,item) tuning offsets. Center-relative × baseScale.
+function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene.clone()), [gltf.scene]);
   const socketName = ANCHOR_TO_SOCKET[anchor];
   const socketPos = socketName && sockets ? sockets[socketName] : null;
-  const local = socketPos
+  const base = socketPos
     ? socketPos                                   // already center-relative
     : [(ANCHOR[anchor] || ANCHOR.none)[0] - center[0],
        (ANCHOR[anchor] || ANCHOR.none)[1] - center[1],
        (ANCHOR[anchor] || ANCHOR.none)[2] - center[2]];
-  const pos = [local[0] * baseScale, local[1] * baseScale, local[2] * baseScale];
-  return <primitive object={scene} position={pos} scale={scale} />;
+  const off = tune?.loc || [0, 0, 0];
+  const pos = [(base[0] + off[0]) * baseScale, (base[1] + off[1]) * baseScale, (base[2] + off[2]) * baseScale];
+  const rot = (tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180);
+  return <primitive object={scene} position={pos} rotation={rot} scale={scale * (tune?.scale ?? 1)} />;
 }
 
-function ItemMesh({ item, baseScale, sockets, center }) {
+function ItemMesh({ item, baseScale, sockets, center, attachTuning, avatarBase }) {
   const local = useCachedGlb(item.url);
   if (!local) return null;
+  const tune = resolveTuning(attachTuning, avatarBase, item.slug);
   return (
     <ItemGLTF
       localUri={local}
       anchor={item.anchor}
       sockets={sockets}
       center={center}
+      tune={tune}
       baseScale={baseScale}
       scale={(item.scale || 0.4) * baseScale}
     />
   );
 }
 
-function Model({ localUri, scale, rot, equippedItems }) {
+function Model({ localUri, scale, rot, equippedItems, attachTuning, avatarBase }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
   const { center, sockets } = useMemo(() => measureScene(scene), [scene]);
@@ -167,14 +190,14 @@ function Model({ localUri, scale, rot, equippedItems }) {
       />
       {(equippedItems || []).map((it, i) => (
         <Suspense key={`${it.url}-${i}`} fallback={null}>
-          <ItemMesh item={it} baseScale={scale} sockets={sockets} center={center} />
+          <ItemMesh item={it} baseScale={scale} sockets={sockets} center={center} attachTuning={attachTuning} avatarBase={avatarBase} />
         </Suspense>
       ))}
     </group>
   );
 }
 
-export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220 }) {
+export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220, attachTuning = null, avatarBase = null }) {
   const [failed, setFailed] = useState(false);
   const localUri = useCachedGlb(url);
   const rot = useRef({ y: 0, x: 0, vy: 0, lastDx: 0, dragging: false });
@@ -208,7 +231,7 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
 
   return (
     <View style={[{ height }, style]} {...pan.panHandlers}>
-      <Canvas camera={{ position: [0, 1.2, 4.2], fov: 50 }}>
+      <Canvas camera={{ position: [0, 1.2, 4.2], fov: 50 }} dpr={[1, 1.5]}>
         <ambientLight intensity={1.1} />
         <hemisphereLight args={['#ffffff', '#b0b0b0', 1.1]} />
         <directionalLight position={[3, 5, 4]} intensity={1.4} />
@@ -216,7 +239,7 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
         <directionalLight position={[0, -3, 2]} intensity={0.4} />
         <Suspense fallback={null}>
           <ErrorGuard onError={() => setFailed(true)}>
-            <Model localUri={localUri} scale={scale} rot={rot} equippedItems={equippedItems} />
+            <Model localUri={localUri} scale={scale} rot={rot} equippedItems={equippedItems} attachTuning={attachTuning} avatarBase={avatarBase} />
           </ErrorGuard>
         </Suspense>
       </Canvas>

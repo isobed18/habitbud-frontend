@@ -17,15 +17,17 @@ export default function AvatarStudio({ navigation }) {
   const [models3d, setModels3d] = useState(SAMPLE_MODELS);
   const [inventory, setInventory] = useState([]);
   const [viewer, setViewer] = useState(false);
+  const [attachTuning, setAttachTuning] = useState(null);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
-      const [pr, mr, ir] = await Promise.allSettled([
+      const [pr, mr, ir, tr] = await Promise.allSettled([
         axiosInstance.get('users/api/profile/'),
         axiosInstance.get('users/api/avatar-models/'),
         axiosInstance.get('users/items/'),
+        axiosInstance.get('users/api/attach-tuning/'),
       ]);
 
       let models = SAMPLE_MODELS;
@@ -35,10 +37,12 @@ export default function AvatarStudio({ navigation }) {
           url: a.glb || a.glb_url,
           scale: a.scale || 1.0,
           thumb: a.thumbnail || null,
+          base: a.base || null,
         })).filter((m) => m.url);
         setModels3d(models);
       }
       if (ir.status === 'fulfilled' && Array.isArray(ir.value.data)) setInventory(ir.value.data);
+      if (tr.status === 'fulfilled' && tr.value.data) setAttachTuning(tr.value.data);
 
       let cfg = (pr.status === 'fulfilled' && parseAvatarConfig(pr.value.data.avatar_config)) || defaultAvatarConfig();
       // 3D-only: ensure a model is selected.
@@ -143,6 +147,8 @@ export default function AvatarStudio({ navigation }) {
         visible={viewer}
         url={config.model_url}
         scale={config.model_scale || 1.2}
+        attachTuning={attachTuning}
+        avatarBase={models3d.find((m) => m.url === config.model_url)?.base || null}
         dressItems={dressItems}
         equipped={config.items || []}
         onToggle={toggleItem}
