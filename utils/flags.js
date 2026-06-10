@@ -11,4 +11,4 @@ export const AI_VERIFY_UI = true;
 // Pivot A/B: snap-style flow (personal habits + multi-friend checks + stories
 // + pair verification streaks) vs. shared/group-habit focused home.
 // The pivot branch sets this true to hide group-habit emphasis on Home.
-export const PIVOT_SNAP_FLOW = false;
+export const PIVOT_SNAP_FLOW = true;
