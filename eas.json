@@ -15,10 +15,16 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "API_URL": "http://192.168.1.8:8000/"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "API_URL": "https://REPLACE-WITH-YOUR-API-DOMAIN/"
+      }
     }
   },
   "submit": {
