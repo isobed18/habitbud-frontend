@@ -237,6 +237,9 @@ const ProfilePage = ({ navigation }) => {
           <Pressable onPress={() => navigation.navigate('Achievements')} style={{ padding: 4 }}>
             <Ionicons name="ribbon-outline" size={24} color="#333" />
           </Pressable>
+          <Pressable onPress={() => navigation.navigate('Stats')} style={{ padding: 4 }}>
+            <Ionicons name="bar-chart-outline" size={24} color="#333" />
+          </Pressable>
           <Pressable onPress={() => { navigation.navigate('Notifications'); fetchUnreadCount(); }} style={{ padding: 4 }}>
             <Ionicons name="notifications-outline" size={24} color="#333" />
             {unreadCount > 0 && (

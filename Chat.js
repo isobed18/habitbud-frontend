@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { unwrapPagination } from './utils/api';
 import { reward, haptics } from './utils/feedback';
 import LevelUpModal from './components/LevelUpModal';
+import Avatar3D from './components/Avatar3D';
+import { parseAvatarConfig } from './utils/avatar';
 let LottieView = null; let TYPING_SRC = null;
 try { LottieView = require('lottie-react-native').default; TYPING_SRC = require('./assets/lottie/typing_grey.json'); } catch (_) {}
 import Avatar from './components/Avatar';
@@ -47,6 +49,7 @@ export default function Chat({ route, navigation }) {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerRemaining, setTimerRemaining] = useState(0);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [show3DMembers, setShow3DMembers] = useState(false); // group 3D strip (opt-in: 3D canvases are heavy)
   const typingTimeoutRef = useRef(null);     // outgoing "stop typing" debounce
   const incomingTypingRef = useRef(null);    // hide other user's indicator
   const reconnectTimeoutRef = useRef(null);
@@ -786,6 +789,39 @@ export default function Chat({ route, navigation }) {
         )}
       </View>
 
+      {/* Group members' 3D avatars side by side — "herkes beraber" görünümü.
+          Opt-in toggle: each canvas costs GPU, so it renders only when opened. */}
+      {conversation?.is_group && (
+        <View style={styles.members3DWrap}>
+          <Pressable style={styles.members3DToggle} onPress={() => setShow3DMembers((v) => !v)}>
+            <Ionicons name="people-circle-outline" size={18} color="#8b5cf6" />
+            <Text style={styles.members3DToggleText}>
+              {show3DMembers ? 'Ekibi gizle' : 'Ekibi 3D gör'}
+            </Text>
+            <Ionicons name={show3DMembers ? 'chevron-up' : 'chevron-down'} size={16} color="#8b5cf6" />
+          </Pressable>
+          {show3DMembers && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, gap: 8 }}>
+              {(conversation.participants || []).slice(0, 5).map((p) => {
+                const cfg = parseAvatarConfig(p.avatar_config, p.username);
+                if (!cfg?.model_url) return (
+                  <View key={p.id} style={styles.member3DCard}>
+                    <View style={styles.member3DFallback}><Text style={styles.member3DLetter}>{p.username.charAt(0).toUpperCase()}</Text></View>
+                    <Text style={styles.member3DName} numberOfLines={1}>{p.username}</Text>
+                  </View>
+                );
+                return (
+                  <View key={p.id} style={styles.member3DCard}>
+                    <Avatar3D url={cfg.model_url} scale={cfg.model_scale || 1.2} height={104} style={{ width: 96 }} />
+                    <Text style={styles.member3DName} numberOfLines={1}>{p.username}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       {conversation?.recovery_eligible_date && (
         <View style={styles.recoveryBanner}>
           <View style={styles.recoveryBannerLeft}>
@@ -1031,6 +1067,13 @@ export default function Chat({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  members3DWrap: { backgroundColor: '#faf5ff', borderBottomWidth: 1, borderBottomColor: '#ede9fe', paddingBottom: 6 },
+  members3DToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 7 },
+  members3DToggleText: { color: '#8b5cf6', fontWeight: '700', fontSize: 13 },
+  member3DCard: { alignItems: 'center', width: 96 },
+  member3DFallback: { width: 96, height: 104, borderRadius: 14, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center' },
+  member3DLetter: { fontSize: 34, fontWeight: '800', color: '#8b5cf6' },
+  member3DName: { fontSize: 11, color: '#6b7280', marginTop: 2, maxWidth: 92 },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',

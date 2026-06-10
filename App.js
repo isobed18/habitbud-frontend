@@ -22,6 +22,7 @@ import Challenges from './Challenges';
 import AddHabit from './AddHabit';
 import Notifications from './Notifications';
 import Achievements from './Achievements';
+import Stats from './Stats';
 import Search from './Search';
 import Settings from './Settings';
 import AvatarStudio from './AvatarStudio';
@@ -193,7 +194,8 @@ export default function App() {
 
             <Stack.Screen name="FriendProfile" component={FriendProfile} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Notifications" component={Notifications} options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="Achievements" component={Achievements} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Achievements" component={Achievements} options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="Stats" component={Stats} options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="Leaderboard" component={Leaderboard} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Search" component={Search} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="Settings" component={Settings} options={{ animation: 'slide_from_right' }} />
