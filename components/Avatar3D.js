@@ -100,8 +100,16 @@ function useCachedGlb(remoteUrl) {
     if (!abs) { setUri(null); return; }
     if (abs.startsWith('file://') || !FileSystem.cacheDirectory) { setUri(abs); return; }
     const safe = abs.split('?')[0].split('/').pop() || 'model.glb';
-    const local = FileSystem.cacheDirectory + 'glb_' + safe;
     (async () => {
+      // Cache key includes the remote content-length so a regenerated GLB (same
+      // filename, different bytes) busts the cache instead of serving a stale
+      // copy forever. Combos/avatars keep their filename, so this is essential.
+      let tag = '';
+      try {
+        const h = await fetch(abs, { method: 'HEAD' });
+        tag = (h.headers.get('content-length') || h.headers.get('etag') || '').replace(/[^0-9a-zA-Z]/g, '').slice(0, 16);
+      } catch (_) { /* offline: fall back to filename-only */ }
+      const local = `${FileSystem.cacheDirectory}glb_${tag}_${safe}`;
       try {
         const info = await FileSystem.getInfoAsync(local);
         if (info.exists && info.size > 0) { if (alive) setUri(local); return; }
