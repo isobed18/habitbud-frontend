@@ -18,17 +18,20 @@ export default function AvatarStudio({ navigation }) {
   const [inventory, setInventory] = useState([]);
   const [viewer, setViewer] = useState(false);
   const [attachTuning, setAttachTuning] = useState(null);
+  const [combos, setCombos] = useState({});   // { 'pinkcat__magic_wand': url }
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     try {
-      const [pr, mr, ir, tr] = await Promise.allSettled([
+      const [pr, mr, ir, tr, cr] = await Promise.allSettled([
         axiosInstance.get('users/api/profile/'),
         axiosInstance.get('users/api/avatar-models/'),
         axiosInstance.get('users/items/'),
         axiosInstance.get('users/api/attach-tuning/'),
+        axiosInstance.get('users/api/combos/'),
       ]);
+      if (cr.status === 'fulfilled' && cr.value.data) setCombos(cr.value.data);
 
       let models = SAMPLE_MODELS;
       if (mr.status === 'fulfilled' && Array.isArray(mr.value.data) && mr.value.data.length) {
@@ -89,10 +92,18 @@ export default function AvatarStudio({ navigation }) {
   };
 
   const dressItems = inventory.filter((it) => it.model_glb || it.model_url);
-  const equippedItems = (config.items || [])
+  const avatarBase = models3d.find((m) => m.url === config.model_url)?.base || null;
+  const equippedObjs = (config.items || [])
     .map((id) => dressItems.find((it) => it.id === id))
-    .filter(Boolean)
-    .map((it) => ({ url: it.model_glb || it.model_url, anchor: it.anchor || 'head', scale: it.item_scale || 0.45 }));
+    .filter(Boolean);
+
+  // If exactly ONE item is equipped and a pre-baked combo exists, show the combo
+  // GLB directly (pixel-identical to Blender) instead of runtime composition.
+  const equippedSlugs = equippedObjs.map((it) => it.slug).filter(Boolean);
+  const comboKey = (avatarBase && equippedSlugs.length === 1) ? `${avatarBase}__${equippedSlugs[0]}` : null;
+  const comboUrl = comboKey ? combos[comboKey] : null;
+  const viewerUrl = comboUrl || config.model_url;
+  const viewerEquipped = comboUrl ? [] : config.items || [];
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8b5cf6" /></View>;
@@ -145,12 +156,12 @@ export default function AvatarStudio({ navigation }) {
 
       <Avatar3DModal
         visible={viewer}
-        url={config.model_url}
+        url={viewerUrl}
         scale={config.model_scale || 1.2}
         attachTuning={attachTuning}
-        avatarBase={models3d.find((m) => m.url === config.model_url)?.base || null}
+        avatarBase={avatarBase}
         dressItems={dressItems}
-        equipped={config.items || []}
+        equipped={viewerEquipped}
         onToggle={toggleItem}
         onSave={() => { setViewer(false); save(); }}
         onClose={() => setViewer(false)}
