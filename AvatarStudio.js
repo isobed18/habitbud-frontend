@@ -93,17 +93,6 @@ export default function AvatarStudio({ navigation }) {
 
   const dressItems = inventory.filter((it) => it.model_glb || it.model_url);
   const avatarBase = models3d.find((m) => m.url === config.model_url)?.base || null;
-  const equippedObjs = (config.items || [])
-    .map((id) => dressItems.find((it) => it.id === id))
-    .filter(Boolean);
-
-  // If exactly ONE item is equipped and a pre-baked combo exists, show the combo
-  // GLB directly (pixel-identical to Blender) instead of runtime composition.
-  const equippedSlugs = equippedObjs.map((it) => it.slug).filter(Boolean);
-  const comboKey = (avatarBase && equippedSlugs.length === 1) ? `${avatarBase}__${equippedSlugs[0]}` : null;
-  const comboUrl = comboKey ? combos[comboKey] : null;
-  const viewerUrl = comboUrl || config.model_url;
-  const viewerEquipped = comboUrl ? [] : config.items || [];
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8b5cf6" /></View>;
@@ -156,12 +145,13 @@ export default function AvatarStudio({ navigation }) {
 
       <Avatar3DModal
         visible={viewer}
-        url={viewerUrl}
+        url={config.model_url}
         scale={config.model_scale || 1.2}
         attachTuning={attachTuning}
         avatarBase={avatarBase}
+        combos={combos}
         dressItems={dressItems}
-        equipped={viewerEquipped}
+        equipped={config.items || []}
         onToggle={toggleItem}
         onSave={() => { setViewer(false); save(); }}
         onClose={() => setViewer(false)}

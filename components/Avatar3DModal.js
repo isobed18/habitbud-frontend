@@ -17,13 +17,25 @@ const { height: H } = Dimensions.get('window');
 export default function Avatar3DModal({
   visible, url, scale = 1.2, onClose,
   dressItems = null, equipped = [], onToggle, onSave,
-  attachTuning = null, avatarBase = null,
+  attachTuning = null, avatarBase = null, combos = {},
 }) {
   if (!visible) return null;
 
-  const equippedObjs = (dressItems || [])
-    .filter((it) => equipped.includes(it.id))
-    .map((it) => ({ url: it.model_glb || it.model_url, anchor: it.anchor || 'head', scale: it.item_scale || 0.45, slug: it.slug }));
+  const comboFor = (slug) => (avatarBase && slug ? combos[`${avatarBase}__${slug}`] : null) || null;
+  const equippedDress = (dressItems || []).filter((it) => equipped.includes(it.id));
+  const slugs = equippedDress.map((it) => it.slug).filter(Boolean);
+
+  // ONE equipped item with a combo -> show the combo GLB as the whole model.
+  // Otherwise -> base avatar + each item pulled from ITS combo (or runtime).
+  const singleCombo = slugs.length === 1 ? comboFor(slugs[0]) : null;
+  const renderUrl = singleCombo || url;
+  const equippedObjs = singleCombo ? [] : equippedDress.map((it) => ({
+    url: it.model_glb || it.model_url,
+    anchor: it.anchor || 'head',
+    scale: it.item_scale || 0.45,
+    slug: it.slug,
+    comboUrl: comboFor(it.slug),
+  }));
 
   return (
     <View style={styles.overlay}>
@@ -37,7 +49,7 @@ export default function Avatar3DModal({
         </Pressable>
       )}
 
-      <Avatar3D url={url} scale={scale} equippedItems={equippedObjs} attachTuning={attachTuning} avatarBase={avatarBase} height={H * (dressItems ? 0.58 : 0.7)} style={{ width: '100%' }} />
+      <Avatar3D url={renderUrl} scale={scale} equippedItems={equippedObjs} attachTuning={attachTuning} avatarBase={avatarBase} height={H * (dressItems ? 0.58 : 0.7)} style={{ width: '100%' }} />
 
       {dressItems ? (
         <View style={styles.dressBar}>

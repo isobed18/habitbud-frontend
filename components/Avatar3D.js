@@ -218,6 +218,57 @@ function ItemMesh({ item, sockets, center, attachTuning, avatarBase }) {
   );
 }
 
+// Multi-item path: pull the item mesh straight out of its single-item combo
+// (which is already perfectly placed by Blender) and drop it onto the shared
+// avatar. Every combo embeds the SAME avatar at the SAME root transform, so the
+// item's combo-root matrix is exactly its placement on this avatar — guaranteed
+// to match the single-item view, with zero socket/offset math.
+function ComboItem({ comboUrl, center }) {
+  const local = useCachedGlb(comboUrl);
+  if (!local) return null;
+  return <ComboItemGLTF localUri={local} center={center} />;
+}
+
+function ComboItemGLTF({ localUri, center }) {
+  const gltf = useGLTF(localUri);
+  const data = useMemo(() => {
+    if (!THREE) return null;
+    const s = gltf.scene.clone(true);
+    s.scale.set(1, 1, 1); s.position.set(0, 0, 0); s.quaternion.identity();
+    s.updateMatrixWorld(true);
+    // The item is the mesh whose ancestor chain contains a socket_* node.
+    let item = null;
+    s.traverse((o) => {
+      if (item || !o.isMesh) return;
+      let p = o.parent;
+      while (p) { if (/socket/i.test(p.name || '')) { item = o; break; } p = p.parent; }
+    });
+    if (!item) return null;
+    plushify(item);
+    return { mesh: item, mat: item.matrixWorld.clone() };
+  }, [gltf.scene]);
+
+  const groupRef = useRef();
+  useEffect(() => {
+    if (groupRef.current && data) {
+      const M = new THREE.Matrix4().makeTranslation(-center[0], -center[1], -center[2]).multiply(data.mat);
+      groupRef.current.matrixAutoUpdate = false;
+      groupRef.current.matrix.copy(M);
+      groupRef.current.matrixWorldNeedsUpdate = true;
+    }
+  }, [data, center]);
+
+  if (!data) return null;
+  // Render the extracted geometry with identity local transform (its world
+  // placement is the group matrix M); a fresh mesh avoids scene-graph conflicts.
+  const mesh = useMemo(() => {
+    const m = new THREE.Mesh(data.mesh.geometry, data.mesh.material);
+    m.matrixAutoUpdate = false;  // identity
+    return m;
+  }, [data]);
+  return <group ref={groupRef}><primitive object={mesh} /></group>;
+}
+
 function Model({ localUri, scale, rot, equippedItems, attachTuning, avatarBase }) {
   const gltf = useGLTF(localUri);
   const scene = useMemo(() => plushify(gltf.scene), [gltf.scene]);
@@ -258,8 +309,10 @@ function Model({ localUri, scale, rot, equippedItems, attachTuning, avatarBase }
       <group scale={scale}>
         <primitive object={scene} position={[-center[0], -center[1], -center[2]]} />
         {(equippedItems || []).map((it, i) => (
-          <Suspense key={`${it.url}-${i}`} fallback={null}>
-            <ItemMesh item={it} sockets={sockets} center={center} attachTuning={attachTuning} avatarBase={avatarBase} />
+          <Suspense key={`${it.comboUrl || it.url}-${i}`} fallback={null}>
+            {it.comboUrl
+              ? <ComboItem comboUrl={it.comboUrl} center={center} />
+              : <ItemMesh item={it} sockets={sockets} center={center} attachTuning={attachTuning} avatarBase={avatarBase} />}
           </Suspense>
         ))}
       </group>
