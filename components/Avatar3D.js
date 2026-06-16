@@ -167,6 +167,16 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
       new THREE.Vector3(loc[0], loc[1], loc[2]),
       new THREE.Quaternion().setFromEuler(rotEuler),
       new THREE.Vector3(s, s, s));
+    // Blender fixes (extract_offset, abs mode) are authored in Blender's Z-up
+    // axes; the socket node has identity rotation in the Y-up glTF scene, so the
+    // socket-relative transform must be basis-changed Z-up -> Y-up (C = Rx(-90)):
+    //   rel_gltf = C · rel_blender · C⁻¹.  Without this the offset/rotation get
+    //   their up/forward axes swapped (item flies off the hand, wrong rotation).
+    if (tune?.abs) {
+      const C = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      const Cinv = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+      rel.premultiply(C).multiply(Cinv);
+    }
     const recenter = new THREE.Matrix4().makeTranslation(-center[0], -center[1], -center[2]);
     return recenter.multiply(socketMat).multiply(rel);
   }, [anchor, sockets, center, tune, scale]);
