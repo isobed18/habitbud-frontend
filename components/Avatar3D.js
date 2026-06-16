@@ -47,7 +47,7 @@ function avatarBaseFromUrl(url) {
 // items hang on independent sockets, so fixes compose automatically.
 function resolveTuning(attachTuning, avatarBase, slug) {
   const t = attachTuning || {};
-  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], quat: null, scale: 1.0, abs: false };
+  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], quat: null, mat: null, scale: 1.0, abs: false };
   const override = slug && avatarBase ? ((t.avatar_overrides || {})[avatarBase] || {})[slug] : null;
   [(t.socket_tuning || {})._default,
    slug ? (t.socket_tuning || {})[slug] : null,
@@ -57,6 +57,7 @@ function resolveTuning(attachTuning, avatarBase, slug) {
     if (layer.loc) merged.loc = layer.loc;
     if (layer.rot_deg) merged.rot_deg = layer.rot_deg;
     if (layer.quat) merged.quat = layer.quat;       // [x,y,z,w]
+    if (layer.mat) merged.mat = layer.mat;          // raw socket-relative Matrix4 (col-major), Y-up
     if (layer.scale != null) merged.scale = layer.scale;
   });
   // A per-avatar override (extract_offset.py) is the item's ABSOLUTE socket-space
@@ -160,20 +161,19 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
       const a = ANCHOR[anchor] || ANCHOR.none;       // fallback: position only
       socketMat = new THREE.Matrix4().makeTranslation(a[0], a[1], a[2]);
     }
-    const loc = tune?.loc || [0, 0, 0];
-    // Override path: quaternion already in glTF frame -> use directly.
-    // Generic path: euler degrees (app-frame guess) -> three.js Euler.
-    let quat;
-    if (tune?.quat) {
-      const q = tune.quat;
-      quat = new THREE.Quaternion(q[0], q[1], q[2], q[3]);
+    let rel;
+    if (tune?.mat) {
+      // Best path: the exact item->socket transform read from the baked combo
+      // (Blender's correct Y-up export). Applied verbatim — no conversion.
+      rel = new THREE.Matrix4().fromArray(tune.mat);
     } else {
+      const loc = tune?.loc || [0, 0, 0];
       const e = new THREE.Euler(...(tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180), 'XYZ');
-      quat = new THREE.Quaternion().setFromEuler(e);
+      const quat = new THREE.Quaternion().setFromEuler(e);
+      const s = (scale ?? 1) * (tune?.scale ?? 1);
+      rel = new THREE.Matrix4().compose(
+        new THREE.Vector3(loc[0], loc[1], loc[2]), quat, new THREE.Vector3(s, s, s));
     }
-    const s = tune?.abs ? (tune.scale ?? 1) : (scale ?? 1) * (tune?.scale ?? 1);
-    const rel = new THREE.Matrix4().compose(
-      new THREE.Vector3(loc[0], loc[1], loc[2]), quat, new THREE.Vector3(s, s, s));
     const recenter = new THREE.Matrix4().makeTranslation(-center[0], -center[1], -center[2]);
     return recenter.multiply(socketMat).multiply(rel);
   }, [anchor, sockets, center, tune, scale]);
