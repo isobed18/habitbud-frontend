@@ -65,15 +65,19 @@ function resolveTuning(attachTuning, avatarBase, slug) {
   return merged;
 }
 
-// Measure the avatar at its native scale: geometric center (so we can recenter
-// models whose origin is off) and each socket's position RELATIVE TO that center.
-// Returns { center:[x,y,z], sockets:{ socket_r:[x,y,z], ... } } — all center-relative,
-// so positioning the scene at -center and items at sockets keeps them aligned.
+// Measure the avatar at its native scale: geometric center (to recenter models
+// whose origin is off) and each socket's FULL world matrix (position + rotation
+// + scale). The matrix is essential: in the glTF/three.js (Y-up) scene the socket
+// carries the avatar's Z-up->Y-up rotation, so item offsets/rotations from
+// Blender (which are socket-relative) must be applied IN the socket's frame —
+// applying them in the avatar-root frame puts the item in the wrong place with
+// the wrong orientation. Returns { center, sockets:{ name: Matrix4 } }.
 function measureScene(scene) {
   const result = { center: [0, 0, 0], sockets: {} };
   if (!scene || !THREE) return result;
   scene.scale.set(1, 1, 1);            // measure in native units, ignore render scale
   scene.position.set(0, 0, 0);
+  scene.quaternion.identity();
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(scene);
   const c = box.getCenter(new THREE.Vector3());
@@ -81,9 +85,7 @@ function measureScene(scene) {
   ['socket_r', 'socket_l', 'socket_head', 'socket_back'].forEach((name) => {
     const node = scene.getObjectByName(name);
     if (!node) return;
-    const p = new THREE.Vector3();
-    node.getWorldPosition(p);
-    result.sockets[name] = [p.x - c.x, p.y - c.y, p.z - c.z];  // center-relative
+    result.sockets[name] = node.matrixWorld.clone();  // relative to scene root
   });
   return result;
 }
@@ -132,9 +134,8 @@ function plushify(scene) {
 // then adjusted by the per-(avatar,item) tuning offsets. Center-relative × baseScale.
 function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune }) {
   const gltf = useGLTF(localUri);
-  // Recenter the item to its bounding-box center — this mirrors attach_socket's
-  // origin_set(BOUNDS) on which the Blender tuning was measured, so items whose
-  // raw origin isn't centered still land correctly.
+  // Recenter the item to its bounding-box center — mirrors attach_socket's
+  // origin_set(BOUNDS) that the Blender tuning was measured against.
   const { scene, pivot } = useMemo(() => {
     const s = plushify(gltf.scene.clone());
     let p = [0, 0, 0];
@@ -144,26 +145,49 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
     }
     return { scene: s, pivot: p };
   }, [gltf.scene]);
-  const socketName = ANCHOR_TO_SOCKET[anchor];
-  const socketPos = socketName && sockets ? sockets[socketName] : null;
-  const base = socketPos
-    ? socketPos                                   // already center-relative
-    : [(ANCHOR[anchor] || ANCHOR.none)[0] - center[0],
-       (ANCHOR[anchor] || ANCHOR.none)[1] - center[1],
-       (ANCHOR[anchor] || ANCHOR.none)[2] - center[2]];
-  const off = tune?.loc || [0, 0, 0];
-  const pos = [(base[0] + off[0]) * baseScale, (base[1] + off[1]) * baseScale, (base[2] + off[2]) * baseScale];
-  const rot = (tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180);
-  // Absolute mode (Blender fix): tune.scale IS the final socket-space scale.
-  const finalScale = tune?.abs ? tune.scale * baseScale : scale * (tune?.scale ?? 1);
+
+  // Build the item's local matrix in the avatar's CENTERED-NATIVE frame:
+  //   M = T(-center) · socketWorld · rel
+  // where rel = compose(tune.loc, tune.rot, itemScale). socketWorld carries the
+  // socket's true frame (incl. the Y-up rotation), so the offset/rotation land
+  // exactly as set in Blender. Applied via matrixAutoUpdate=false.
+  const matrix = useMemo(() => {
+    if (!THREE) return null;
+    const socketName = ANCHOR_TO_SOCKET[anchor];
+    let socketMat = socketName && sockets ? sockets[socketName] : null;
+    if (!socketMat) {
+      const a = ANCHOR[anchor] || ANCHOR.none;       // fallback: position only
+      socketMat = new THREE.Matrix4().makeTranslation(a[0], a[1], a[2]);
+    }
+    const loc = tune?.loc || [0, 0, 0];
+    const rotEuler = new THREE.Euler(
+      ...(tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180), 'XYZ');
+    const s = tune?.abs ? (tune.scale ?? 1) : (scale ?? 1) * (tune?.scale ?? 1);
+    const rel = new THREE.Matrix4().compose(
+      new THREE.Vector3(loc[0], loc[1], loc[2]),
+      new THREE.Quaternion().setFromEuler(rotEuler),
+      new THREE.Vector3(s, s, s));
+    const recenter = new THREE.Matrix4().makeTranslation(-center[0], -center[1], -center[2]);
+    return recenter.multiply(socketMat).multiply(rel);
+  }, [anchor, sockets, center, tune, scale]);
+
+  const groupRef = useRef();
+  useEffect(() => {
+    if (groupRef.current && matrix) {
+      groupRef.current.matrixAutoUpdate = false;
+      groupRef.current.matrix.copy(matrix);
+      groupRef.current.matrixWorldNeedsUpdate = true;
+    }
+  }, [matrix]);
+
   return (
-    <group position={pos} rotation={rot} scale={finalScale}>
+    <group ref={groupRef}>
       <primitive object={scene} position={[-pivot[0], -pivot[1], -pivot[2]]} />
     </group>
   );
 }
 
-function ItemMesh({ item, baseScale, sockets, center, attachTuning, avatarBase }) {
+function ItemMesh({ item, sockets, center, attachTuning, avatarBase }) {
   const local = useCachedGlb(item.url);
   if (!local) return null;
   const tune = resolveTuning(attachTuning, avatarBase, item.slug);
@@ -174,8 +198,7 @@ function ItemMesh({ item, baseScale, sockets, center, attachTuning, avatarBase }
       sockets={sockets}
       center={center}
       tune={tune}
-      baseScale={baseScale}
-      scale={(item.scale || 0.4) * baseScale}
+      scale={item.scale || 0.4}   /* native item scale (non-abs path); inner group adds render scale */
     />
   );
 }
@@ -209,23 +232,22 @@ function Model({ localUri, scale, rot, equippedItems, attachTuning, avatarBase }
     ref.current.rotation.y = cur.current.y + idleTilt;
     ref.current.rotation.x = cur.current.x + Math.sin(t * 1.6) * 0.018;
     ref.current.position.y = idleBounce;
+    // idleBreath rides on top of the inner group's baseScale.
     ref.current.scale.setScalar(idleBreath);
   });
   return (
     <group ref={ref}>
-      {/* Recenter: offset the model so its geometric center sits at the group
-          origin (some GLBs aren't centered -> appeared top-left). Items use the
-          same center, so they stay aligned to the avatar. */}
-      <primitive
-        object={scene}
-        scale={scale}
-        position={[-center[0] * scale, -center[1] * scale, -center[2] * scale]}
-      />
-      {(equippedItems || []).map((it, i) => (
-        <Suspense key={`${it.url}-${i}`} fallback={null}>
-          <ItemMesh item={it} baseScale={scale} sockets={sockets} center={center} attachTuning={attachTuning} avatarBase={avatarBase} />
-        </Suspense>
-      ))}
+      {/* Inner group applies the render scale ONCE; everything inside works in
+          the avatar's centered-native units (avatar recentered, items placed via
+          socketWorld·rel). This keeps avatar + items in one consistent frame. */}
+      <group scale={scale}>
+        <primitive object={scene} position={[-center[0], -center[1], -center[2]]} />
+        {(equippedItems || []).map((it, i) => (
+          <Suspense key={`${it.url}-${i}`} fallback={null}>
+            <ItemMesh item={it} sockets={sockets} center={center} attachTuning={attachTuning} avatarBase={avatarBase} />
+          </Suspense>
+        ))}
+      </group>
     </group>
   );
 }
