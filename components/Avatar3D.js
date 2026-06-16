@@ -47,7 +47,7 @@ function avatarBaseFromUrl(url) {
 // items hang on independent sockets, so fixes compose automatically.
 function resolveTuning(attachTuning, avatarBase, slug) {
   const t = attachTuning || {};
-  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], scale: 1.0, abs: false };
+  const merged = { loc: [0, 0, 0], rot_deg: [0, 0, 0], quat: null, scale: 1.0, abs: false };
   const override = slug && avatarBase ? ((t.avatar_overrides || {})[avatarBase] || {})[slug] : null;
   [(t.socket_tuning || {})._default,
    slug ? (t.socket_tuning || {})[slug] : null,
@@ -56,11 +56,12 @@ function resolveTuning(attachTuning, avatarBase, slug) {
     if (!layer) return;
     if (layer.loc) merged.loc = layer.loc;
     if (layer.rot_deg) merged.rot_deg = layer.rot_deg;
+    if (layer.quat) merged.quat = layer.quat;       // [x,y,z,w]
     if (layer.scale != null) merged.scale = layer.scale;
   });
-  // Blender fixes (extract_offset.py) store the item's ABSOLUTE socket-space
-  // transform — loc/rot/scale must be applied as-is, not on top of the generic
-  // item_scale heuristic, or everything double-scales.
+  // A per-avatar override (extract_offset.py) is the item's ABSOLUTE socket-space
+  // transform, PRE-CONVERTED to the glTF/Y-up frame and stored as a quaternion
+  // (convention-free). Applied verbatim — no euler, no axis swap.
   if (override) merged.abs = true;
   return merged;
 }
@@ -160,23 +161,19 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
       socketMat = new THREE.Matrix4().makeTranslation(a[0], a[1], a[2]);
     }
     const loc = tune?.loc || [0, 0, 0];
-    const rotEuler = new THREE.Euler(
-      ...(tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180), 'XYZ');
+    // Override path: quaternion already in glTF frame -> use directly.
+    // Generic path: euler degrees (app-frame guess) -> three.js Euler.
+    let quat;
+    if (tune?.quat) {
+      const q = tune.quat;
+      quat = new THREE.Quaternion(q[0], q[1], q[2], q[3]);
+    } else {
+      const e = new THREE.Euler(...(tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180), 'XYZ');
+      quat = new THREE.Quaternion().setFromEuler(e);
+    }
     const s = tune?.abs ? (tune.scale ?? 1) : (scale ?? 1) * (tune?.scale ?? 1);
     const rel = new THREE.Matrix4().compose(
-      new THREE.Vector3(loc[0], loc[1], loc[2]),
-      new THREE.Quaternion().setFromEuler(rotEuler),
-      new THREE.Vector3(s, s, s));
-    // Blender fixes (extract_offset, abs mode) are authored in Blender's Z-up
-    // axes; the socket node has identity rotation in the Y-up glTF scene, so the
-    // socket-relative transform must be basis-changed Z-up -> Y-up (C = Rx(-90)):
-    //   rel_gltf = C · rel_blender · C⁻¹.  Without this the offset/rotation get
-    //   their up/forward axes swapped (item flies off the hand, wrong rotation).
-    if (tune?.abs) {
-      const C = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
-      const Cinv = new THREE.Matrix4().makeRotationX(Math.PI / 2);
-      rel.premultiply(C).multiply(Cinv);
-    }
+      new THREE.Vector3(loc[0], loc[1], loc[2]), quat, new THREE.Vector3(s, s, s));
     const recenter = new THREE.Matrix4().makeTranslation(-center[0], -center[1], -center[2]);
     return recenter.multiply(socketMat).multiply(rel);
   }, [anchor, sockets, center, tune, scale]);
