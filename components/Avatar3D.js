@@ -30,6 +30,17 @@ const ANCHOR = {
 // anchor -> socket Empty name baked into the avatar GLB by the rig tooling.
 const ANCHOR_TO_SOCKET = { hand: 'socket_r', head: 'socket_head', face: 'socket_head', neck: 'socket_head', back: 'socket_back' };
 
+// Avatar base key from its GLB url, e.g.
+//   /media/models/avatars/pinkcat_socketed_CFAwb47.glb -> "pinkcat"
+// Robust against Django's random re-import suffixes (matching by full url fails
+// because the stored avatar_config can point at a stale filename).
+function avatarBaseFromUrl(url) {
+  if (!url) return null;
+  const file = url.split('?')[0].split('/').pop() || '';
+  const token = file.split('_')[0].toLowerCase();
+  return token.replace(/[^a-z]/g, '') || null;
+}
+
 // Merge placement tuning for one item on one avatar. Most specific wins:
 // avatar_overrides[base][slug] > socket_tuning[slug] > socket_tuning._default.
 // Fixing an item once per avatar makes EVERY hand×head combination correct —
@@ -121,7 +132,18 @@ function plushify(scene) {
 // then adjusted by the per-(avatar,item) tuning offsets. Center-relative × baseScale.
 function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune }) {
   const gltf = useGLTF(localUri);
-  const scene = useMemo(() => plushify(gltf.scene.clone()), [gltf.scene]);
+  // Recenter the item to its bounding-box center — this mirrors attach_socket's
+  // origin_set(BOUNDS) on which the Blender tuning was measured, so items whose
+  // raw origin isn't centered still land correctly.
+  const { scene, pivot } = useMemo(() => {
+    const s = plushify(gltf.scene.clone());
+    let p = [0, 0, 0];
+    if (THREE) {
+      const c = new THREE.Box3().setFromObject(s).getCenter(new THREE.Vector3());
+      p = [c.x, c.y, c.z];
+    }
+    return { scene: s, pivot: p };
+  }, [gltf.scene]);
   const socketName = ANCHOR_TO_SOCKET[anchor];
   const socketPos = socketName && sockets ? sockets[socketName] : null;
   const base = socketPos
@@ -134,7 +156,11 @@ function ItemGLTF({ localUri, anchor, scale, baseScale, sockets, center, tune })
   const rot = (tune?.rot_deg || [0, 0, 0]).map((d) => (d * Math.PI) / 180);
   // Absolute mode (Blender fix): tune.scale IS the final socket-space scale.
   const finalScale = tune?.abs ? tune.scale * baseScale : scale * (tune?.scale ?? 1);
-  return <primitive object={scene} position={pos} rotation={rot} scale={finalScale} />;
+  return (
+    <group position={pos} rotation={rot} scale={finalScale}>
+      <primitive object={scene} position={[-pivot[0], -pivot[1], -pivot[2]]} />
+    </group>
+  );
 }
 
 function ItemMesh({ item, baseScale, sockets, center, attachTuning, avatarBase }) {
@@ -207,6 +233,9 @@ function Model({ localUri, scale, rot, equippedItems, attachTuning, avatarBase }
 export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style, height = 220, attachTuning = null, avatarBase = null }) {
   const [failed, setFailed] = useState(false);
   const localUri = useCachedGlb(url);
+  // Derive the base from the url when the caller didn't pass one (or passed a
+  // stale-match null) so per-avatar tuning always resolves.
+  const effectiveBase = avatarBase || avatarBaseFromUrl(url);
   const rot = useRef({ y: 0, x: 0, vy: 0, lastDx: 0, dragging: false });
 
   const pan = useMemo(() => PanResponder.create({
@@ -246,7 +275,7 @@ export default function Avatar3D({ url, scale = 0.04, equippedItems = [], style,
         <directionalLight position={[0, -3, 2]} intensity={0.4} />
         <Suspense fallback={null}>
           <ErrorGuard onError={() => setFailed(true)}>
-            <Model localUri={localUri} scale={scale} rot={rot} equippedItems={equippedItems} attachTuning={attachTuning} avatarBase={avatarBase} />
+            <Model localUri={localUri} scale={scale} rot={rot} equippedItems={equippedItems} attachTuning={attachTuning} avatarBase={effectiveBase} />
           </ErrorGuard>
         </Suspense>
       </Canvas>
